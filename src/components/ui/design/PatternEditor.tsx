@@ -35,10 +35,10 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
       id: `pattern-${Date.now()}`,
       name: '新模式',
       notes: [],
+      pattern: [],
       tempo: 120,
-      version: '1.0.0',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      modifiedAt: new Date().toISOString()
     }
   );
 
@@ -92,14 +92,13 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
     if (readOnly) return;
 
     const newNote: Note = {
-      ...note,
-      id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      ...note
     };
 
     setEditingPattern(prev => ({
       ...prev,
       notes: [...prev.notes, newNote],
-      updated_at: new Date().toISOString()
+      modifiedAt: new Date().toISOString()
     }));
   };
 
@@ -110,7 +109,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
     setEditingPattern(prev => ({
       ...prev,
       notes: prev.notes.filter((_, i) => i !== index),
-      updated_at: new Date().toISOString()
+      modifiedAt: new Date().toISOString()
     }));
   };
 
@@ -123,7 +122,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
       notes: prev.notes.map((note, i) =>
         i === index ? { ...note, ...updates } : note
       ),
-      updated_at: new Date().toISOString()
+      modifiedAt: new Date().toISOString()
     }));
   };
 
@@ -137,13 +136,13 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
     if (newOctave < 0 || newOctave > 8) return;
 
     const newFrequency = MusicTheory.noteToFrequency(note.name, newOctave);
-    const newVolume = currentProfile ?
+    const newSPL = currentProfile ?
       appCore?.audioEngine.calculateVolume(newFrequency, currentProfile) || 0 : 0;
 
     updateNote(index, {
       octave: newOctave,
       frequency: newFrequency,
-      volume: newVolume
+      spl: newSPL
     });
   };
 

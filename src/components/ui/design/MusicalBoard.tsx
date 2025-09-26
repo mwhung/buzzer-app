@@ -75,11 +75,11 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
 
         // 檢查頻率是否在範圍內
         if (frequency >= frequencyRange.min && frequency <= frequencyRange.max) {
-          // 計算音量
-          const volume = appCore?.audioEngine.calculateVolume(frequency, currentProfile) || 0;
+          // 計算SPL值
+          const spl = appCore?.audioEngine.calculateVolume(frequency, currentProfile) || 0;
 
           // 應用音量過濾器
-          if (filters.showOnlyHighVolume && volume < filters.volumeThreshold) {
+          if (filters.showOnlyHighVolume && spl < filters.volumeThreshold) {
             continue;
           }
 
@@ -87,7 +87,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
             name: noteName,
             octave,
             frequency,
-            volume,
+            spl,
             duration: 500 // 默認時長
           });
         }
@@ -95,13 +95,13 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
     }
 
     return notes;
-  }, [currentProfile, filters, frequencyRange, appCore]);
+  }, [currentProfile, filters, frequencyRange, appCore?.audioEngine]);
 
-  // 獲取最佳音符（音量最高的前20%）
+  // 獲取最佳音符（SPL值最高的前20%）
   const bestNotes = useMemo(() => {
-    const sortedByVolume = [...availableNotes].sort((a, b) => b.volume - a.volume);
-    const topCount = Math.ceil(sortedByVolume.length * 0.2);
-    return new Set(sortedByVolume.slice(0, topCount).map(note => `${note.name}${note.octave}`));
+    const sortedBySPL = [...availableNotes].sort((a, b) => (b.spl || 0) - (a.spl || 0));
+    const topCount = Math.ceil(sortedBySPL.length * 0.2);
+    return new Set(sortedBySPL.slice(0, topCount).map(note => `${note.name}${note.octave}`));
   }, [availableNotes]);
 
   // 處理音符點擊
@@ -136,17 +136,18 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
       return 'bg-green-100 text-green-900 border-green-300 hover:bg-green-200';
     }
 
-    // 根據音量決定顏色深淺
-    const intensity = Math.min(note.volume / 80, 1);
+    // 根據SPL值決定顏色深淺
+    const intensity = Math.min((note.spl || 0) / 80, 1);
     const opacity = 0.1 + intensity * 0.4;
 
     return `bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-900`;
   };
 
-  // 獲取音符尺寸類（根據音量）
+  // 獲取音符尺寸類（根據SPL值）
   const getNoteSizeClass = (note: Note) => {
-    if (note.volume > 70) return 'w-12 h-12 text-sm';
-    if (note.volume > 50) return 'w-10 h-10 text-xs';
+    const spl = note.spl || 0;
+    if (spl > 70) return 'w-12 h-12 text-sm';
+    if (spl > 50) return 'w-10 h-10 text-xs';
     return 'w-8 h-8 text-xs';
   };
 
@@ -290,7 +291,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
                   ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                   font-medium
                 `}
-                title={`${note.name}${note.octave} (${note.frequency.toFixed(1)}Hz, ${note.volume.toFixed(1)}dB)`}
+                title={`${note.name}${note.octave} (${note.frequency.toFixed(1)}Hz, ${(note.spl || 0).toFixed(1)}dB)`}
               >
                 <div className="text-center">
                   <div className="leading-none">{note.name}</div>
