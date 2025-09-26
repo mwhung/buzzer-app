@@ -196,16 +196,17 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
 
   // 獲取pattern統計
   const getPatternStats = (pattern: Pattern) => {
-    const totalDuration = pattern.notes.reduce((sum, note) => sum + note.duration, 0);
-    const uniqueNotes = new Set(pattern.notes.map(note => `${note.name}${note.octave}`)).size;
-    const avgVolume = pattern.notes.length > 0 ?
-      pattern.notes.reduce((sum, note) => sum + note.volume, 0) / pattern.notes.length : 0;
+    const notes = pattern.notes || [];
+    const totalDuration = notes.reduce((sum, note) => sum + note.duration, 0);
+    const uniqueNotes = new Set(notes.map(note => `${note.name}${note.octave}`)).size;
+    const avgVolume = notes.length > 0 ?
+      notes.reduce((sum, note) => sum + note.volume, 0) / notes.length : 0;
 
     return {
       totalDuration: totalDuration / 1000,
       uniqueNotes,
       avgVolume,
-      noteCount: pattern.notes.length
+      noteCount: notes.length
     };
   };
 

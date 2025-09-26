@@ -16,6 +16,7 @@ import {
   ProfileEvent,
   WorkflowEvent
 } from '../../types';
+import { ensurePatternSync } from '../../utils/patternConverter';
 
 export interface BuzzerAppConfig {
   initialWorkflowStage?: WorkflowStages;
@@ -53,6 +54,10 @@ export class BuzzerAppCore {
 
   // 事件監聽器
   private eventListeners: Map<string, ((event: any) => void)[]> = new Map();
+
+  // 狀態記憶化緩存
+  private cachedAppState: AppState | null = null;
+  private cachedStatistics: any = null;
 
   constructor(config: BuzzerAppConfig = {}) {
     this.config = {
@@ -188,6 +193,14 @@ export class BuzzerAppCore {
   }
 
   /**
+   * 清除狀態緩存
+   */
+  private clearStateCache(): void {
+    this.cachedAppState = null;
+    this.cachedStatistics = null;
+  }
+
+  /**
    * 從模組更新應用狀態
    */
   private updateAppStateFromModules(): void {
@@ -196,13 +209,40 @@ export class BuzzerAppCore {
     this.appState.workflowStage = this.workflowManager.getCurrentStage();
     this.appState.isPlaying = this.audioEngine.getPlaybackState().isPlaying;
     this.appState.isExporting = this.exportEngine.isCurrentlyExporting();
+
+    // 狀態更新後清除緩存
+    this.clearStateCache();
   }
 
   /**
-   * 獲取應用狀態
+   * 淺比較兩個對象是否相等
+   */
+  private shallowEqual(obj1: any, obj2: any): boolean {
+    if (obj1 === obj2) return true;
+    if (!obj1 || !obj2) return false;
+
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+
+    if (keys1.length !== keys2.length) return false;
+
+    for (let key of keys1) {
+      if (obj1[key] !== obj2[key]) return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * 獲取應用狀態（記憶化版本）
    */
   getAppState(): AppState {
-    return { ...this.appState };
+    // 如果沒有緩存或狀態發生變化，創建新的狀態對象
+    if (!this.cachedAppState || !this.shallowEqual(this.cachedAppState, this.appState)) {
+      this.cachedAppState = { ...this.appState };
+    }
+
+    return this.cachedAppState;
   }
 
   /**
@@ -286,7 +326,7 @@ export class BuzzerAppCore {
   }
 
   /**
-   * 獲取應用統計信息
+   * 獲取應用統計信息（記憶化版本）
    */
   getAppStatistics(): {
     profileCount: number;
@@ -301,13 +341,70 @@ export class BuzzerAppCore {
       return sum + (stats?.totalDuration || 0);
     }, 0);
 
-    return {
+    const newStatistics = {
       profileCount: this.profileManager.getAllProfiles().length,
       patternCount: patterns.length,
       totalPatternDuration: totalDuration,
       currentStage: this.appState.workflowStage,
       playbackTime: 0 // TODO: 實現播放時間統計
     };
+
+    // 如果沒有緩存或統計信息發生變化，使用新的統計對象
+    if (!this.cachedStatistics || !this.shallowEqual(this.cachedStatistics, newStatistics)) {
+      this.cachedStatistics = newStatistics;
+    }
+
+    return this.cachedStatistics;
+  }
+
+  /**
+   * 獲取同步的Pattern對象（確保pattern和notes數組一致）
+   */
+  getSyncedPattern(patternId?: string): Pattern | null {
+    let pattern: Pattern | null;
+
+    if (patternId) {
+      pattern = this.patternManager.getPatternById(patternId);
+    } else {
+      pattern = this.appState.currentPattern;
+    }
+
+    if (!pattern) return null;
+
+    return ensurePatternSync(pattern);
+  }
+
+  /**
+   * 獲取所有同步的Pattern對象
+   */
+  getAllSyncedPatterns(): Pattern[] {
+    const patterns = this.patternManager.getAllPatterns();
+    return patterns.map(pattern => ensurePatternSync(pattern));
+  }
+
+  /**
+   * 更新Pattern並保持同步
+   */
+  updateSyncedPattern(updatedPattern: Partial<Pattern>): boolean {
+    try {
+      const syncedPattern = ensurePatternSync(updatedPattern);
+
+      // 更新PatternManager
+      if (syncedPattern.id) {
+        this.patternManager.updatePattern(syncedPattern.id, syncedPattern);
+      }
+
+      // 如果是當前Pattern，更新應用狀態
+      if (this.appState.currentPattern?.id === syncedPattern.id) {
+        this.appState.currentPattern = syncedPattern;
+      }
+
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Pattern同步失敗';
+      this.addError(message);
+      return false;
+    }
   }
 
   /**
@@ -319,6 +416,10 @@ export class BuzzerAppCore {
     if (this.appState.errors.length > 10) {
       this.appState.errors = this.appState.errors.slice(-10);
     }
+
+    // 狀態更新後清除緩存
+    this.clearStateCache();
+
     console.error('BuzzerAppCore:', message);
     this.emitAppEvent('error', { message });
   }
@@ -328,6 +429,10 @@ export class BuzzerAppCore {
    */
   clearErrors(): void {
     this.appState.errors = [];
+
+    // 狀態更新後清除緩存
+    this.clearStateCache();
+
     this.emitAppEvent('errors-cleared', {});
   }
 

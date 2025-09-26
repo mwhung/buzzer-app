@@ -9,7 +9,9 @@ export interface Buzzer {
 export interface Pattern {
   id?: string;
   name: string;
-  pattern: [number, number][]; // [frequency, duration]
+  pattern: [number, number][]; // [frequency, duration] - for backend compatibility
+  notes: Note[]; // for UI components
+  tempo?: number; // BPM
   createdAt?: string;
   modifiedAt?: string;
 }
@@ -18,6 +20,7 @@ export interface Note {
   name: string; // C, C#, D, D#, E, F, F#, G, G#, A, A#, B
   octave: number; // 0-8
   frequency: number;
+  duration: number; // duration in milliseconds
   spl?: number; // SPL value if available in buzzer profile
 }
 

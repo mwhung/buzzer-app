@@ -20,7 +20,8 @@ export class AudioEngine {
   private masterVolume: number = 0.3;
 
   constructor() {
-    this.initializeAudioContext();
+    // 延遲初始化AudioContext，避免在頁面載入時立即創建
+    // AudioContext 將在首次使用時創建
   }
 
   /**
@@ -86,6 +87,20 @@ export class AudioEngine {
     console.log(`AudioEngine: ${frequency}Hz SPL=${spl}dB → 標準音量=${normalizedVolume.toFixed(3)} → 最終音量=${finalVolume.toFixed(3)}`);
 
     return finalVolume;
+  }
+
+  /**
+   * 播放單個音符
+   */
+  async playNote(note: any, buzzerProfile: Buzzer): Promise<void> {
+    if (!note || !buzzerProfile) return;
+
+    try {
+      await this.playTone(note.frequency, note.duration || 500, buzzerProfile);
+    } catch (error) {
+      console.error('AudioEngine: 播放音符失敗', error);
+      this.emitEvent('error', { message: '播放音符失敗', details: error });
+    }
   }
 
   /**

@@ -115,7 +115,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
 
     switch (criteria) {
       case 'with_notes':
-        filtered = patterns.filter(p => p.notes.length > 0);
+        filtered = patterns.filter(p => p.notes && p.notes.length > 0);
         break;
       case 'recent':
         const oneWeekAgo = new Date();
@@ -135,9 +135,9 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
     if (selectedCount === 0) return null;
 
     const selectedPatternList = patterns.filter(p => selectedPatterns.has(p.id));
-    const totalNotes = selectedPatternList.reduce((sum, p) => sum + p.notes.length, 0);
+    const totalNotes = selectedPatternList.reduce((sum, p) => sum + (p.notes?.length || 0), 0);
     const totalDuration = selectedPatternList.reduce((sum, p) =>
-      sum + p.notes.reduce((noteSum, note) => noteSum + note.duration, 0), 0
+      sum + (p.notes || []).reduce((noteSum, note) => noteSum + note.duration, 0), 0
     );
 
     // 估算文件大小（基於格式和質量）
@@ -295,7 +295,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
             variant="secondary"
             size="sm"
           >
-            有音符的模式 ({patterns.filter(p => p.notes.length > 0).length})
+            有音符的模式 ({patterns.filter(p => p.notes && p.notes.length > 0).length})
           </Button>
           <Button
             onClick={() => filterPatterns('recent')}
@@ -346,7 +346,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {patterns.map((pattern) => {
               const isSelected = selectedPatterns.has(pattern.id);
-              const totalDuration = pattern.notes.reduce((sum, note) => sum + note.duration, 0);
+              const totalDuration = (pattern.notes || []).reduce((sum, note) => sum + note.duration, 0);
 
               return (
                 <div
@@ -368,7 +368,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
                       <span className="text-xs text-gray-500">v{pattern.version}</span>
                     </div>
                     <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
-                      <span>{pattern.notes.length} 音符</span>
+                      <span>{pattern.notes?.length || 0} 音符</span>
                       <span>{(totalDuration / 1000).toFixed(1)}s</span>
                       <span>{pattern.tempo} BPM</span>
                     </div>

@@ -51,7 +51,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const progressTimerRef = useRef<NodeJS.Timeout>();
 
   // 計算總時長
-  const totalDuration = pattern ?
+  const totalDuration = pattern && pattern.notes && Array.isArray(pattern.notes) ?
     pattern.notes.reduce((sum, note) => sum + note.duration, 0) : 0;
 
   // 更新播放狀態
@@ -82,7 +82,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       progress: 0
     }));
 
-    const playNotes = async (notes: typeof pattern.notes, startIndex = 0) => {
+    const playNotes = async (notes: any[], startIndex = 0) => {
       let elapsed = 0;
 
       for (let i = startIndex; i < notes.length; i++) {
@@ -136,8 +136,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     };
 
     const notesToPlay = randomMode ?
-      [...pattern.notes].sort(() => Math.random() - 0.5) :
-      pattern.notes;
+      [...(pattern.notes || [])].sort(() => Math.random() - 0.5) :
+      (pattern.notes || []);
 
     await playNotes(notesToPlay);
   };
@@ -220,8 +220,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     let accumulated = 0;
     let targetIndex = 0;
 
-    for (let i = 0; i < pattern.notes.length; i++) {
-      accumulated += pattern.notes[i].duration;
+    for (let i = 0; i < (pattern.notes || []).length; i++) {
+      accumulated += (pattern.notes || [])[i].duration;
       if (accumulated >= targetTime) {
         targetIndex = i;
         break;
@@ -261,7 +261,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     };
   }, []);
 
-  const hasPattern = pattern && pattern.notes.length > 0;
+  const hasPattern = pattern && pattern.notes && Array.isArray(pattern.notes) && pattern.notes.length > 0;
   const canPlay = hasPattern && currentProfile && !disabled;
 
   return (
@@ -299,7 +299,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         </div>
 
         {/* 當前播放音符信息 */}
-        {playbackState.isPlaying && playbackState.currentIndex >= 0 && pattern && (
+        {playbackState.isPlaying && playbackState.currentIndex >= 0 && pattern && pattern.notes && pattern.notes[playbackState.currentIndex] && (
           <div className="mt-3 p-3 bg-blue-50 rounded-lg">
             <div className="flex items-center justify-between text-sm">
               <span className="text-blue-900">
@@ -307,7 +307,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 {pattern.notes[playbackState.currentIndex].octave}
               </span>
               <span className="text-blue-700">
-                {playbackState.currentIndex + 1} / {pattern.notes.length}
+                {playbackState.currentIndex + 1} / {pattern.notes?.length || 0}
               </span>
             </div>
           </div>

@@ -110,11 +110,8 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
     setStatistics(newStatistics);
   }, []);
 
-  // 定期更新狀態
-  useEffect(() => {
-    const interval = setInterval(updateAppState, 1000);
-    return () => clearInterval(interval);
-  }, [updateAppState]);
+  // 事件驅動狀態更新（移除定期輪詢）
+  // 改為在初始化時設置事件監聽器進行狀態同步
 
   // 快捷操作
   const playCurrentPattern = useCallback(async (): Promise<boolean> => {

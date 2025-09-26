@@ -57,15 +57,33 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
   const dragItemRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
 
-  // 同步外部pattern變更
+  // 深度比較兩個Pattern是否相等
+  const patternsEqual = (p1: Pattern | null, p2: Pattern | null): boolean => {
+    if (p1 === p2) return true;
+    if (!p1 || !p2) return false;
+
+    return (
+      p1.id === p2.id &&
+      p1.name === p2.name &&
+      p1.tempo === p2.tempo &&
+      JSON.stringify(p1.notes || []) === JSON.stringify(p2.notes || [])
+    );
+  };
+
+  // 同步外部pattern變更（使用深度比較）
   useEffect(() => {
-    if (pattern) {
+    if (pattern && !patternsEqual(pattern, editingPattern)) {
       setEditingPattern(pattern);
     }
   }, [pattern]);
 
-  // 通知外部pattern變更
+  // 通知外部pattern變更 (避免在初始化時觸發)
+  const isInitialMount = useRef(true);
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     onPatternChange?.(editingPattern);
   }, [editingPattern, onPatternChange]);
 
@@ -193,7 +211,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
 
   // 播放模式預覽
   const playPattern = async () => {
-    if (!appCore || !currentProfile || editingPattern.notes.length === 0) return;
+    if (!appCore || !currentProfile || !editingPattern.notes || editingPattern.notes.length === 0) return;
 
     setIsPlaying(true);
     setCurrentPlayingIndex(0);
@@ -290,7 +308,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
                   onClick={clearPattern}
                   variant="secondary"
                   size="sm"
-                  disabled={editingPattern.notes.length === 0}
+                  disabled={!editingPattern.notes || editingPattern.notes.length === 0}
                 >
                   清空
                 </Button>
@@ -299,7 +317,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
                   onClick={handleSave}
                   variant="primary"
                   size="sm"
-                  disabled={editingPattern.notes.length === 0}
+                  disabled={!editingPattern.notes || editingPattern.notes.length === 0}
                 >
                   保存模式
                 </Button>
@@ -341,19 +359,19 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
               </div>
               <div>
                 <div className="font-medium text-gray-900">
-                  {(editingPattern.notes.reduce((sum, note) => sum + note.duration, 0) / 1000).toFixed(1)}s
+                  {(editingPattern.notes?.reduce((sum, note) => sum + note.duration, 0) / 1000 || 0).toFixed(1)}s
                 </div>
                 <div className="text-gray-500">總時長</div>
               </div>
               <div>
                 <div className="font-medium text-gray-900">
-                  {Math.min(...editingPattern.notes.map(n => n.frequency)).toFixed(0)}Hz
+                  {editingPattern.notes?.length > 0 ? Math.min(...editingPattern.notes.map(n => n.frequency)).toFixed(0) : 0}Hz
                 </div>
                 <div className="text-gray-500">最低頻率</div>
               </div>
               <div>
                 <div className="font-medium text-gray-900">
-                  {Math.max(...editingPattern.notes.map(n => n.frequency)).toFixed(0)}Hz
+                  {editingPattern.notes?.length > 0 ? Math.max(...editingPattern.notes.map(n => n.frequency)).toFixed(0) : 0}Hz
                 </div>
                 <div className="text-gray-500">最高頻率</div>
               </div>
