@@ -1,0 +1,600 @@
+// Export Manager 導出管理組件
+
+import React, { useState, useEffect } from 'react';
+import { Pattern } from '../../../types';
+import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
+import { Card } from '../common/Card';
+import { Button } from '../common/Button';
+import { Modal } from '../common/Modal';
+
+export interface ExportManagerProps {
+  className?: string;
+  preSelectedPatterns?: Pattern[];
+}
+
+interface ExportOptions {
+  format: 'wav' | 'json';
+  quality: 'high' | 'medium' | 'low';
+  includeMetadata: boolean;
+  zipOutput: boolean;
+}
+
+interface ExportProgress {
+  isExporting: boolean;
+  currentPattern: number;
+  totalPatterns: number;
+  currentPatternName: string;
+  stage: 'preparing' | 'processing' | 'completing' | 'done';
+  error?: string;
+  success?: string;
+}
+
+export const ExportManager: React.FC<ExportManagerProps> = ({
+  className = '',
+  preSelectedPatterns = []
+}) => {
+  const { appCore } = useBuzzerApp();
+
+  // 狀態
+  const [patterns, setPatterns] = useState<Pattern[]>([]);
+  const [selectedPatterns, setSelectedPatterns] = useState<Set<string>>(new Set());
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    format: 'wav',
+    quality: 'high',
+    includeMetadata: true,
+    zipOutput: true
+  });
+  const [exportProgress, setExportProgress] = useState<ExportProgress>({
+    isExporting: false,
+    currentPattern: 0,
+    totalPatterns: 0,
+    currentPatternName: '',
+    stage: 'preparing'
+  });
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // 載入patterns
+  useEffect(() => {
+    if (!appCore) return;
+
+    const loadPatterns = () => {
+      const allPatterns = appCore.patternManager.getAllPatterns();
+      setPatterns(allPatterns);
+    };
+
+    loadPatterns();
+
+    // 監聽pattern事件
+    const handlePatternEvent = () => {
+      loadPatterns();
+    };
+
+    appCore.patternManager.addEventListener('create', handlePatternEvent);
+    appCore.patternManager.addEventListener('update', handlePatternEvent);
+    appCore.patternManager.addEventListener('delete', handlePatternEvent);
+
+    return () => {
+      appCore.patternManager.removeEventListener('create', handlePatternEvent);
+      appCore.patternManager.removeEventListener('update', handlePatternEvent);
+      appCore.patternManager.removeEventListener('delete', handlePatternEvent);
+    };
+  }, [appCore]);
+
+  // 預選patterns
+  useEffect(() => {
+    if (preSelectedPatterns.length > 0) {
+      setSelectedPatterns(new Set(preSelectedPatterns.map(p => p.id)));
+    }
+  }, [preSelectedPatterns]);
+
+  // 選擇/取消選擇pattern
+  const togglePatternSelection = (patternId: string) => {
+    setSelectedPatterns(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(patternId)) {
+        newSet.delete(patternId);
+      } else {
+        newSet.add(patternId);
+      }
+      return newSet;
+    });
+  };
+
+  // 全選/取消全選
+  const toggleSelectAll = () => {
+    if (selectedPatterns.size === patterns.length) {
+      setSelectedPatterns(new Set());
+    } else {
+      setSelectedPatterns(new Set(patterns.map(p => p.id)));
+    }
+  };
+
+  // 根據條件篩選patterns
+  const filterPatterns = (criteria: 'all' | 'with_notes' | 'recent') => {
+    let filtered: Pattern[];
+
+    switch (criteria) {
+      case 'with_notes':
+        filtered = patterns.filter(p => p.notes.length > 0);
+        break;
+      case 'recent':
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        filtered = patterns.filter(p => new Date(p.updated_at) > oneWeekAgo);
+        break;
+      default:
+        filtered = patterns;
+    }
+
+    setSelectedPatterns(new Set(filtered.map(p => p.id)));
+  };
+
+  // 獲取導出預估
+  const getExportEstimate = () => {
+    const selectedCount = selectedPatterns.size;
+    if (selectedCount === 0) return null;
+
+    const selectedPatternList = patterns.filter(p => selectedPatterns.has(p.id));
+    const totalNotes = selectedPatternList.reduce((sum, p) => sum + p.notes.length, 0);
+    const totalDuration = selectedPatternList.reduce((sum, p) =>
+      sum + p.notes.reduce((noteSum, note) => noteSum + note.duration, 0), 0
+    );
+
+    // 估算文件大小（基於格式和質量）
+    let estimatedSize = 0;
+    if (exportOptions.format === 'wav') {
+      const baseSize = totalDuration / 1000 * 44100 * 2; // 16bit mono
+      const qualityMultiplier = {
+        high: 2,
+        medium: 1.5,
+        low: 1
+      }[exportOptions.quality];
+      estimatedSize = baseSize * qualityMultiplier;
+    } else {
+      // JSON 大小估算
+      estimatedSize = totalNotes * 100; // 每個音符約100字節
+    }
+
+    // 估算處理時間
+    const estimatedTime = exportOptions.format === 'wav' ?
+      (totalDuration / 1000) * 0.5 : // WAV需要渲染時間
+      selectedCount * 0.1; // JSON處理較快
+
+    return {
+      patterns: selectedCount,
+      notes: totalNotes,
+      duration: Math.round(totalDuration / 1000),
+      size: estimatedSize,
+      time: Math.ceil(estimatedTime)
+    };
+  };
+
+  // 開始導出
+  const startExport = async () => {
+    if (!appCore || selectedPatterns.size === 0) return;
+
+    const patternsToExport = patterns.filter(p => selectedPatterns.has(p.id));
+
+    setExportProgress({
+      isExporting: true,
+      currentPattern: 0,
+      totalPatterns: patternsToExport.length,
+      currentPatternName: '',
+      stage: 'preparing'
+    });
+
+    setIsExportModalOpen(true);
+
+    try {
+      for (let i = 0; i < patternsToExport.length; i++) {
+        const pattern = patternsToExport[i];
+
+        setExportProgress(prev => ({
+          ...prev,
+          currentPattern: i + 1,
+          currentPatternName: pattern.name,
+          stage: 'processing'
+        }));
+
+        // 根據格式導出
+        if (exportOptions.format === 'wav') {
+          await appCore.exportEngine.exportPatternAsWAV(pattern, {
+            quality: exportOptions.quality,
+            includeMetadata: exportOptions.includeMetadata
+          });
+        } else {
+          await appCore.exportEngine.exportPatternAsJSON(pattern, {
+            includeMetadata: exportOptions.includeMetadata
+          });
+        }
+
+        // 模擬處理延遲
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      setExportProgress(prev => ({
+        ...prev,
+        stage: 'completing'
+      }));
+
+      // 如果選擇壓縮，創建ZIP文件
+      if (exportOptions.zipOutput && patternsToExport.length > 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      setExportProgress(prev => ({
+        ...prev,
+        stage: 'done',
+        success: `成功導出 ${patternsToExport.length} 個模式`
+      }));
+
+      // 3秒後關閉模態框
+      setTimeout(() => {
+        setIsExportModalOpen(false);
+        setExportProgress({
+          isExporting: false,
+          currentPattern: 0,
+          totalPatterns: 0,
+          currentPatternName: '',
+          stage: 'preparing'
+        });
+        setSelectedPatterns(new Set());
+      }, 3000);
+
+    } catch (error) {
+      setExportProgress(prev => ({
+        ...prev,
+        isExporting: false,
+        error: error instanceof Error ? error.message : '導出失敗'
+      }));
+    }
+  };
+
+  // 格式化文件大小
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // 格式化時間
+  const formatTime = (seconds: number) => {
+    if (seconds < 60) return seconds + ' 秒';
+    return Math.floor(seconds / 60) + ' 分 ' + (seconds % 60) + ' 秒';
+  };
+
+  const estimate = getExportEstimate();
+
+  return (
+    <div className={`space-y-6 ${className}`}>
+      {/* 標題區域 */}
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">批量導出</h2>
+        <p className="text-gray-600 mt-1">選擇模式並配置導出選項</p>
+      </div>
+
+      {/* 快速篩選 */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">快速選擇</h3>
+          <div className="flex items-center space-x-2 text-sm text-gray-600">
+            <span>已選中 {selectedPatterns.size} / {patterns.length} 個模式</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => filterPatterns('all')}
+            variant="secondary"
+            size="sm"
+          >
+            全選 ({patterns.length})
+          </Button>
+          <Button
+            onClick={() => filterPatterns('with_notes')}
+            variant="secondary"
+            size="sm"
+          >
+            有音符的模式 ({patterns.filter(p => p.notes.length > 0).length})
+          </Button>
+          <Button
+            onClick={() => filterPatterns('recent')}
+            variant="secondary"
+            size="sm"
+          >
+            最近一週 ({patterns.filter(p => {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            return new Date(p.updated_at) > oneWeekAgo;
+          }).length})
+          </Button>
+          <Button
+            onClick={() => setSelectedPatterns(new Set())}
+            variant="secondary"
+            size="sm"
+          >
+            清除選擇
+          </Button>
+        </div>
+      </Card>
+
+      {/* Pattern列表 */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">選擇模式</h3>
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={selectedPatterns.size === patterns.length && patterns.length > 0}
+              onChange={toggleSelectAll}
+              className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+            />
+            <span className="ml-2 text-sm text-gray-700">全選</span>
+          </label>
+        </div>
+
+        {patterns.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-gray-400 mb-4">
+              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+            </div>
+            <p>沒有可導出的模式</p>
+          </div>
+        ) : (
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {patterns.map((pattern) => {
+              const isSelected = selectedPatterns.has(pattern.id);
+              const totalDuration = pattern.notes.reduce((sum, note) => sum + note.duration, 0);
+
+              return (
+                <div
+                  key={pattern.id}
+                  className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
+                    isSelected ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => togglePatternSelection(pattern.id)}
+                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-gray-900 truncate">{pattern.name}</h4>
+                      <span className="text-xs text-gray-500">v{pattern.version}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
+                      <span>{pattern.notes.length} 音符</span>
+                      <span>{(totalDuration / 1000).toFixed(1)}s</span>
+                      <span>{pattern.tempo} BPM</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      {/* 導出選項 */}
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">導出選項</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 格式選擇 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              導出格式
+            </label>
+            <div className="space-y-3">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="format"
+                  value="wav"
+                  checked={exportOptions.format === 'wav'}
+                  onChange={(e) => setExportOptions(prev => ({
+                    ...prev,
+                    format: e.target.value as 'wav' | 'json'
+                  }))}
+                  className="rounded-full border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">WAV音頻文件</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="format"
+                  value="json"
+                  checked={exportOptions.format === 'json'}
+                  onChange={(e) => setExportOptions(prev => ({
+                    ...prev,
+                    format: e.target.value as 'wav' | 'json'
+                  }))}
+                  className="rounded-full border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">JSON數據文件</span>
+              </label>
+            </div>
+          </div>
+
+          {/* 質量設置（僅WAV） */}
+          {exportOptions.format === 'wav' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                音質設定
+              </label>
+              <select
+                value={exportOptions.quality}
+                onChange={(e) => setExportOptions(prev => ({
+                  ...prev,
+                  quality: e.target.value as 'high' | 'medium' | 'low'
+                }))}
+                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="high">高品質 (48kHz, 24bit)</option>
+                <option value="medium">標準品質 (44.1kHz, 16bit)</option>
+                <option value="low">壓縮品質 (22kHz, 16bit)</option>
+              </select>
+            </div>
+          )}
+
+          {/* 其他選項 */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              其他選項
+            </label>
+            <div className="space-y-3">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.includeMetadata}
+                  onChange={(e) => setExportOptions(prev => ({
+                    ...prev,
+                    includeMetadata: e.target.checked
+                  }))}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">包含元數據</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={exportOptions.zipOutput}
+                  onChange={(e) => setExportOptions(prev => ({
+                    ...prev,
+                    zipOutput: e.target.checked
+                  }))}
+                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">打包為ZIP文件</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* 導出預估和確認 */}
+      {estimate && (
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">導出預估</h3>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-gray-50 p-3 rounded-lg text-center">
+              <div className="text-2xl font-bold text-gray-900">{estimate.patterns}</div>
+              <div className="text-sm text-gray-500">模式</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg text-center">
+              <div className="text-2xl font-bold text-gray-900">{estimate.notes}</div>
+              <div className="text-sm text-gray-500">音符</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg text-center">
+              <div className="text-2xl font-bold text-gray-900">{formatFileSize(estimate.size)}</div>
+              <div className="text-sm text-gray-500">預估大小</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg text-center">
+              <div className="text-2xl font-bold text-gray-900">{formatTime(estimate.time)}</div>
+              <div className="text-sm text-gray-500">預估時間</div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={startExport}
+              variant="primary"
+              size="lg"
+              disabled={selectedPatterns.size === 0 || exportProgress.isExporting}
+              loading={exportProgress.isExporting}
+              icon={
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 11l3 3m0 0l3-3m-3 3V8" />
+                </svg>
+              }
+            >
+              開始導出 ({selectedPatterns.size} 個模式)
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* 導出進度模態框 */}
+      <Modal
+        isOpen={isExportModalOpen}
+        onClose={() => {}}
+        title="導出進度"
+        size="md"
+      >
+        <div className="space-y-6">
+          {/* 進度條 */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                整體進度
+              </span>
+              <span className="text-sm text-gray-500">
+                {exportProgress.currentPattern} / {exportProgress.totalPatterns}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300"
+                style={{
+                  width: `${(exportProgress.currentPattern / exportProgress.totalPatterns) * 100}%`
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 當前狀態 */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="flex items-center space-x-3">
+              {exportProgress.isExporting && (
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent"></div>
+              )}
+              <div>
+                <div className="font-medium text-gray-900">
+                  {exportProgress.stage === 'preparing' && '準備導出...'}
+                  {exportProgress.stage === 'processing' && `正在處理: ${exportProgress.currentPatternName}`}
+                  {exportProgress.stage === 'completing' && '完成中...'}
+                  {exportProgress.stage === 'done' && '導出完成！'}
+                </div>
+                {exportProgress.currentPatternName && exportProgress.stage === 'processing' && (
+                  <div className="text-sm text-gray-500 mt-1">
+                    模式 {exportProgress.currentPattern} / {exportProgress.totalPatterns}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 狀態消息 */}
+          {exportProgress.error && (
+            <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm text-red-800">{exportProgress.error}</span>
+              </div>
+            </div>
+          )}
+
+          {exportProgress.success && (
+            <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm text-green-800">{exportProgress.success}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+    </div>
+  );
+};
