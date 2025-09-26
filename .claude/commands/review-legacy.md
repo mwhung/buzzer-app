@@ -1,0 +1,1 @@
+我們有非常多的改動，請你全面深入仔細 review 一下，以目前此工具的功能及approach來說，是否有遺留不再需要的legacy code。在不影響code正確性及完整性的前提下，請使用best practice移除這些不需要的legacy code。

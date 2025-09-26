@@ -1,0 +1,6 @@
+.App {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* 移除默認的居中樣式，讓BuzzerSimulator自己控制佈局 */
