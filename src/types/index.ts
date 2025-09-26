@@ -83,7 +83,7 @@ export interface PatternEvent {
 }
 
 export interface ProfileEvent {
-  type: 'select' | 'import' | 'create' | 'delete';
+  type: 'select' | 'create' | 'delete';
   profile?: Buzzer;
   profileId?: string;
 }

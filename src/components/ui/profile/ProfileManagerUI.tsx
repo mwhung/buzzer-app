@@ -46,12 +46,10 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
     appCore.profileManager.addEventListener('create', handleProfileEvent);
     appCore.profileManager.addEventListener('select', handleProfileEvent);
-    appCore.profileManager.addEventListener('import', handleProfileEvent);
 
     return () => {
       appCore.profileManager.removeEventListener('create', handleProfileEvent);
       appCore.profileManager.removeEventListener('select', handleProfileEvent);
-      appCore.profileManager.removeEventListener('import', handleProfileEvent);
     };
   }, [appCore]);
 
@@ -83,18 +81,26 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
     setImportStatus({ loading: true });
 
     try {
-      const profileId = await appCore.profileManager.importProfileFromFile(importFile);
-      setImportStatus({
-        loading: false,
-        success: `成功導入Profile: ${profileId}`
-      });
-      setImportFile(null);
+      const result = await appCore.profileManager.loadProfileFromFile(importFile);
 
-      // 延遲關閉模態框
-      setTimeout(() => {
-        setIsImportModalOpen(false);
-        setImportStatus({ loading: false });
-      }, 1500);
+      if (result.success) {
+        setImportStatus({
+          loading: false,
+          success: `成功導入Profile: ${result.profileId}`
+        });
+        setImportFile(null);
+
+        // 延遲關閉模態框
+        setTimeout(() => {
+          setIsImportModalOpen(false);
+          setImportStatus({ loading: false });
+        }, 1500);
+      } else {
+        setImportStatus({
+          loading: false,
+          error: result.error || '導入失敗'
+        });
+      }
 
     } catch (error) {
       setImportStatus({
@@ -103,6 +109,7 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
       });
     }
   };
+
 
   // 獲取profile統計信息
   const getProfileStats = (profileId: string) => {
@@ -137,14 +144,15 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
           const stats = getProfileStats(id);
 
           return (
-            <Card
+            <div
               key={id}
-              variant={isSelected ? 'highlighted' : 'default'}
-              className={`cursor-pointer transition-all duration-200 hover:scale-105 ${
-                isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
-              }`}
+              className="cursor-pointer transition-all duration-200 hover:scale-105"
               onClick={() => handleSelectProfile(id)}
             >
+              <Card
+                variant={isSelected ? 'highlighted' : 'default'}
+                className={isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
+              >
               <div className="space-y-4">
                 {/* Profile名稱和狀態 */}
                 <div className="flex items-center justify-between">
@@ -182,10 +190,6 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
                 {/* 選擇按鈕 */}
                 <Button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelectProfile(id);
-                  }}
                   variant={isSelected ? 'success' : 'primary'}
                   size="sm"
                   className="w-full"
@@ -194,7 +198,8 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
                   {isSelected ? '已選擇' : '選擇此Profile'}
                 </Button>
               </div>
-            </Card>
+              </Card>
+            </div>
           );
         })}
 

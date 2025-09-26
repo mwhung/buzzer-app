@@ -14,8 +14,142 @@ export class ProfileManager {
   private eventListeners: Map<string, ((event: ProfileEvent) => void)[]> = new Map();
 
   constructor() {
-    // 載入預設profile
+    // 載入預設profiles (包含內建和JSON檔案)
+    this.loadDefaultProfiles();
+  }
+
+  /**
+   * 從檔案載入 buzzer profile
+   */
+  async loadProfileFromFile(file: File): Promise<{ success: boolean; profileId?: string; error?: string }> {
+    try {
+      const fileContent = await this.readFileContent(file);
+      const profileData = JSON.parse(fileContent);
+
+      // 驗證 profile 數據
+      const validation = this.validateProfile(profileData);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: `Profile 驗證失敗: ${validation.errors.join(', ')}`
+        };
+      }
+
+      // 創建 Buzzer 對象
+      const buzzerProfile: Buzzer = {
+        buzzer_name: profileData.buzzer_name,
+        frequencies: profileData.frequencies,
+        spl_values: profileData.spl_values
+      };
+
+      // 添加到管理器
+      const profileId = this.addProfile(buzzerProfile);
+
+
+      return {
+        success: true,
+        profileId
+      };
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知錯誤';
+      return {
+        success: false,
+        error: `載入檔案失敗: ${message}`
+      };
+    }
+  }
+
+  /**
+   * 從預設位置載入 profile
+   */
+  async loadProfileFromUrl(url: string): Promise<{ success: boolean; profileId?: string; error?: string }> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const profileData = await response.json();
+
+      // 驗證 profile 數據
+      const validation = this.validateProfile(profileData);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: `Profile 驗證失敗: ${validation.errors.join(', ')}`
+        };
+      }
+
+      // 創建 Buzzer 對象
+      const buzzerProfile: Buzzer = {
+        buzzer_name: profileData.buzzer_name,
+        frequencies: profileData.frequencies,
+        spl_values: profileData.spl_values
+      };
+
+      // 添加到管理器
+      const profileId = this.addProfile(buzzerProfile);
+
+
+      return {
+        success: true,
+        profileId
+      };
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知錯誤';
+      return {
+        success: false,
+        error: `載入 URL 失敗: ${message}`
+      };
+    }
+  }
+
+  /**
+   * 讀取檔案內容
+   */
+  private readFileContent(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const content = event.target?.result;
+        if (typeof content === 'string') {
+          resolve(content);
+        } else {
+          reject(new Error('無法讀取檔案內容'));
+        }
+      };
+
+      reader.onerror = () => {
+        reject(new Error('檔案讀取失敗'));
+      };
+
+      reader.readAsText(file);
+    });
+  }
+
+  /**
+   * 載入預設 buzzer profiles
+   */
+  async loadDefaultProfiles(): Promise<void> {
+    // 載入內建預設 profile
     this.loadDefaultProfile();
+
+    // 嘗試載入預設的 JSON profiles
+    const defaultUrls = [
+      '/profiles/default-buzzer.json',
+      '/profiles/high-frequency-buzzer.json'
+    ];
+
+    for (const url of defaultUrls) {
+      try {
+        await this.loadProfileFromUrl(url);
+      } catch (error) {
+        console.warn(`ProfileManager: 無法載入預設 profile: ${url}`, error);
+      }
+    }
   }
 
   /**
@@ -32,7 +166,6 @@ export class ProfileManager {
     this.profiles.set(defaultId, defaultProfile);
     this.currentProfileId = defaultId;
 
-    console.log('ProfileManager: 預設profile載入完成');
   }
 
   /**
@@ -110,6 +243,77 @@ export class ProfileManager {
   }
 
   /**
+   * 導出 profile 為 JSON 檔案
+   */
+  exportProfileToFile(profileId: string): { success: boolean; error?: string } {
+    try {
+      const profile = this.getProfile(profileId);
+      if (!profile) {
+        return {
+          success: false,
+          error: 'Profile 不存在'
+        };
+      }
+
+      // 創建完整的 JSON 數據
+      const exportData = {
+        buzzer_name: profile.buzzer_name,
+        description: `由 Buzzer App 導出的配置檔`,
+        version: "1.0",
+        created_date: new Date().toISOString().split('T')[0],
+        frequencies: profile.frequencies,
+        spl_values: profile.spl_values
+      };
+
+      // 創建下載連結
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      // 自動下載
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${profile.buzzer_name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+
+      return { success: true };
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知錯誤';
+      return {
+        success: false,
+        error: `導出失敗: ${message}`
+      };
+    }
+  }
+
+  /**
+   * 獲取所有可載入的 profile 清單
+   */
+  getAvailableProfiles(): Array<{ id: string; name: string; isDefault: boolean }> {
+    const profiles: Array<{ id: string; name: string; isDefault: boolean }> = [];
+
+    this.profiles.forEach((profile, id) => {
+      profiles.push({
+        id,
+        name: profile.buzzer_name,
+        isDefault: profile.buzzer_name === "Default Buzzer"
+      });
+    });
+
+    return profiles.sort((a, b) => {
+      // Default 排第一，其他按名稱排序
+      if (a.isDefault) return -1;
+      if (b.isDefault) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  /**
    * 添加新的profile
    */
   addProfile(profile: Buzzer): string {
@@ -132,58 +336,10 @@ export class ProfileManager {
       profileId
     });
 
-    console.log(`ProfileManager: 添加profile成功 - ${profile.buzzer_name} (ID: ${profileId})`);
     return profileId;
   }
 
-  /**
-   * 從JSON文件導入profile
-   */
-  async importProfileFromFile(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
 
-      reader.onload = (e) => {
-        try {
-          const result = e.target?.result;
-          if (typeof result !== 'string') {
-            throw new Error('無法讀取文件內容');
-          }
-
-          const profileData = JSON.parse(result);
-          const profileId = this.addProfile(profileData);
-
-          this.emitEvent({
-            type: 'import',
-            profile: profileData,
-            profileId
-          });
-
-          resolve(profileId);
-        } catch (error) {
-          reject(new Error(`導入失敗: ${error instanceof Error ? error.message : '未知錯誤'}`));
-        }
-      };
-
-      reader.onerror = () => {
-        reject(new Error('文件讀取失敗'));
-      };
-
-      reader.readAsText(file);
-    });
-  }
-
-  /**
-   * 導出profile為JSON
-   */
-  exportProfileToJSON(profileId: string): string {
-    const profile = this.profiles.get(profileId);
-    if (!profile) {
-      throw new Error(`Profile不存在: ${profileId}`);
-    }
-
-    return JSON.stringify(profile, null, 2);
-  }
 
   /**
    * 獲取profile

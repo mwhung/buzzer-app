@@ -29,7 +29,17 @@ export default function App() {
 
   // 本地狀態
   const [selectedNotes, setSelectedNotes] = useState<any[]>([]);
-  const [editingPattern, setEditingPattern] = useState<any>(null);
+
+  // 創建穩定的空 pattern 初始值
+  const [editingPattern, setEditingPattern] = useState<any>(() => ({
+    id: `temp-${Date.now()}`,
+    name: '新模式',
+    notes: [],
+    pattern: [],
+    tempo: 120,
+    createdAt: new Date().toISOString(),
+    modifiedAt: new Date().toISOString()
+  }));
 
   // 處理音符選擇（從音樂棋盤）
   const handleNoteSelect = (note: any) => {
