@@ -30,7 +30,6 @@ export class AudioEngine {
   private async initializeAudioContext(): Promise<void> {
     try {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      console.log('AudioEngine: 音頻上下文初始化成功');
     } catch (error) {
       console.error('AudioEngine: 音頻上下文初始化失敗', error);
     }
@@ -51,7 +50,6 @@ export class AudioEngine {
     if (this.audioContext.state === 'suspended') {
       try {
         await this.audioContext.resume();
-        console.log('AudioEngine: 音頻上下文恢復成功');
       } catch (error) {
         console.error('AudioEngine: 音頻上下文恢復失敗', error);
         return false;
@@ -68,7 +66,6 @@ export class AudioEngine {
     const freqIndex = buzzerProfile.frequencies.indexOf(frequency);
 
     if (freqIndex === -1) {
-      console.log(`AudioEngine: 頻率 ${frequency}Hz 不在 buzzer profile 中，使用默認音量 0.1`);
       return 0.1 * this.masterVolume;
     }
 
@@ -84,8 +81,6 @@ export class AudioEngine {
     // 應用主音量控制
     const finalVolume = normalizedVolume * this.masterVolume;
 
-    console.log(`AudioEngine: ${frequency}Hz SPL=${spl}dB → 標準音量=${normalizedVolume.toFixed(3)} → 最終音量=${finalVolume.toFixed(3)}`);
-
     return finalVolume;
   }
 
@@ -99,7 +94,7 @@ export class AudioEngine {
       await this.playTone(note.frequency, note.duration || 500, buzzerProfile);
     } catch (error) {
       console.error('AudioEngine: 播放音符失敗', error);
-      this.emitEvent('error', { message: '播放音符失敗', details: error });
+      this.emitEvent({ type: 'error', message: '播放音符失敗', details: error } as AudioEvent);
     }
   }
 
@@ -123,7 +118,7 @@ export class AudioEngine {
             type: 'step',
             frequency: 0,
             duration
-          });
+          } as AudioEvent);
           resolve();
         }, duration);
       });
@@ -151,7 +146,7 @@ export class AudioEngine {
         type: 'step',
         frequency,
         duration
-      });
+      } as AudioEvent);
 
       return new Promise<void>(resolve => {
         this.playbackTimeout = window.setTimeout(() => {
@@ -207,7 +202,7 @@ export class AudioEngine {
     this.emitEvent({
       type: 'play',
       patternId: pattern.id
-    });
+    } as AudioEvent);
 
     try {
       for (let i = 0; i < pattern.pattern.length; i++) {
@@ -219,7 +214,6 @@ export class AudioEngine {
         this.playbackState.currentStep = i;
         const [frequency, duration] = pattern.pattern[i];
 
-        console.log(`AudioEngine: 播放步驟 ${i + 1}: ${frequency}Hz for ${duration}ms`);
         await this.playTone(frequency, duration, buzzerProfile);
       }
     } catch (error) {
@@ -234,15 +228,13 @@ export class AudioEngine {
    * 停止播放
    */
   stopPlayback(): void {
-    console.log('AudioEngine: 停止播放');
-
     this.playbackState.isPlaying = false;
     this.stopCurrentTone();
 
     this.emitEvent({
       type: 'stop',
       patternId: this.playbackState.patternId
-    });
+    } as AudioEvent);
 
     this.playbackState = {
       isPlaying: false,
@@ -251,13 +243,6 @@ export class AudioEngine {
     };
   }
 
-  /**
-   * 暫停播放（暫時不實現，保留接口）
-   */
-  pausePlayback(): void {
-    // TODO: 實現暫停功能
-    console.log('AudioEngine: 暫停功能待實現');
-  }
 
   /**
    * 錄製pattern為音頻
@@ -346,7 +331,6 @@ export class AudioEngine {
    */
   setMasterVolume(volume: number): void {
     this.masterVolume = Math.max(0.01, Math.min(1.0, volume));
-    console.log(`AudioEngine: 主音量設置為 ${(this.masterVolume * 100).toFixed(0)}%`);
   }
 
   /**
@@ -406,6 +390,5 @@ export class AudioEngine {
       this.audioContext = null;
     }
     this.eventListeners.clear();
-    console.log('AudioEngine: 已銷毀');
   }
 }

@@ -1,6 +1,6 @@
 // Playback Controls 播放控制組件
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pattern } from '../../../types';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 import { Button } from '../common/Button';
@@ -12,30 +12,13 @@ export interface PlaybackControlsProps {
   disabled?: boolean;
 }
 
-interface PlaybackState {
-  isPlaying: boolean;
-  currentIndex: number;
-  progress: number;
-  elapsed: number;
-  duration: number;
-}
-
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   pattern,
   className = '',
   onVolumeChange,
   disabled = false
 }) => {
-  const { currentProfile, appCore } = useBuzzerApp();
-
-  // 播放狀態
-  const [playbackState, setPlaybackState] = useState<PlaybackState>({
-    isPlaying: false,
-    currentIndex: -1,
-    progress: 0,
-    elapsed: 0,
-    duration: 0
-  });
+  const { currentProfile, appCore, isPlaying } = useBuzzerApp();
 
   // 音量控制
   const [masterVolume, setMasterVolume] = useState(30);
@@ -46,21 +29,9 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const [loopMode, setLoopMode] = useState(false);
   const [randomMode, setRandomMode] = useState(false);
 
-  // 引用
-  const playbackTimerRef = useRef<NodeJS.Timeout>();
-  const progressTimerRef = useRef<NodeJS.Timeout>();
-
   // 計算總時長
   const totalDuration = pattern && pattern.notes && Array.isArray(pattern.notes) ?
     pattern.notes.reduce((sum, note) => sum + note.duration, 0) : 0;
-
-  // 更新播放狀態
-  useEffect(() => {
-    setPlaybackState(prev => ({
-      ...prev,
-      duration: totalDuration
-    }));
-  }, [totalDuration]);
 
   // 音量變更處理
   useEffect(() => {
@@ -70,127 +41,20 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     onVolumeChange?.(isMuted ? 0 : masterVolume);
   }, [masterVolume, isMuted, appCore, onVolumeChange]);
 
-  // 播放模式
+  // 播放模式 - 簡化版本，直接使用 AudioEngine
   const playPattern = async () => {
     if (!pattern || !currentProfile || !appCore || disabled) return;
 
-    setPlaybackState(prev => ({
-      ...prev,
-      isPlaying: true,
-      currentIndex: 0,
-      elapsed: 0,
-      progress: 0
-    }));
-
-    const playNotes = async (notes: any[], startIndex = 0) => {
-      let elapsed = 0;
-
-      for (let i = startIndex; i < notes.length; i++) {
-        if (!playbackState.isPlaying && playbackState.currentIndex === -1) {
-          break; // 被手動停止
-        }
-
-        setPlaybackState(prev => ({
-          ...prev,
-          currentIndex: i,
-          elapsed,
-          progress: (elapsed / totalDuration) * 100
-        }));
-
-        const note = notes[i];
-        await appCore.audioEngine.playNote(note, currentProfile);
-
-        // 等待音符時長，同時更新進度
-        const stepDuration = note.duration;
-        const stepSize = 50; // 50ms 更新一次
-        const steps = Math.ceil(stepDuration / stepSize);
-
-        for (let step = 0; step < steps; step++) {
-          if (!playbackState.isPlaying) break;
-
-          await new Promise(resolve => {
-            playbackTimerRef.current = setTimeout(resolve, stepSize);
-          });
-
-          elapsed += stepSize;
-          setPlaybackState(prev => ({
-            ...prev,
-            elapsed,
-            progress: (elapsed / totalDuration) * 100
-          }));
-        }
-      }
-
-      // 播放完成
-      if (loopMode && playbackState.isPlaying) {
-        // 循環播放
-        await playNotes(notes, 0);
-      } else {
-        setPlaybackState(prev => ({
-          ...prev,
-          isPlaying: false,
-          currentIndex: -1,
-          progress: 100
-        }));
-      }
-    };
-
-    const notesToPlay = randomMode ?
-      [...(pattern.notes || [])].sort(() => Math.random() - 0.5) :
-      (pattern.notes || []);
-
-    await playNotes(notesToPlay);
+    try {
+      await appCore.playCurrentPattern();
+    } catch (error) {
+      console.error('播放失敗:', error);
+    }
   };
 
   // 停止播放
   const stopPlayback = () => {
-    setPlaybackState(prev => ({
-      ...prev,
-      isPlaying: false,
-      currentIndex: -1,
-      progress: 0,
-      elapsed: 0
-    }));
-
-    if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
-    }
-    if (progressTimerRef.current) {
-      clearTimeout(progressTimerRef.current);
-    }
-
     appCore?.stopPlayback();
-  };
-
-  // 暫停播放
-  const pausePlayback = () => {
-    setPlaybackState(prev => ({
-      ...prev,
-      isPlaying: false
-    }));
-
-    if (playbackTimerRef.current) {
-      clearTimeout(playbackTimerRef.current);
-    }
-
-    appCore?.stopPlayback();
-  };
-
-  // 繼續播放
-  const resumePlayback = async () => {
-    if (!pattern || playbackState.currentIndex === -1) {
-      await playPattern();
-      return;
-    }
-
-    setPlaybackState(prev => ({
-      ...prev,
-      isPlaying: true
-    }));
-
-    // 從當前位置繼續播放
-    // 這裡簡化處理，重新開始播放
-    await playPattern();
   };
 
   // 音量控制
@@ -212,35 +76,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     }
   };
 
-  // 快進/快退（跳到指定位置）
-  const seekTo = (percentage: number) => {
-    if (!pattern) return;
-
-    const targetTime = (percentage / 100) * totalDuration;
-    let accumulated = 0;
-    let targetIndex = 0;
-
-    for (let i = 0; i < (pattern.notes || []).length; i++) {
-      accumulated += (pattern.notes || [])[i].duration;
-      if (accumulated >= targetTime) {
-        targetIndex = i;
-        break;
-      }
-    }
-
-    setPlaybackState(prev => ({
-      ...prev,
-      currentIndex: targetIndex,
-      elapsed: targetTime,
-      progress: percentage
-    }));
-
-    if (playbackState.isPlaying) {
-      // 如果正在播放，從新位置繼續
-      playPattern();
-    }
-  };
-
   // 格式化時間顯示
   const formatTime = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);
@@ -248,18 +83,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-
-  // 清理定時器
-  useEffect(() => {
-    return () => {
-      if (playbackTimerRef.current) {
-        clearTimeout(playbackTimerRef.current);
-      }
-      if (progressTimerRef.current) {
-        clearTimeout(progressTimerRef.current);
-      }
-    };
-  }, []);
 
   const hasPattern = pattern && pattern.notes && Array.isArray(pattern.notes) && pattern.notes.length > 0;
   const canPlay = hasPattern && currentProfile && !disabled;
@@ -273,42 +96,16 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             {pattern ? pattern.name : '未選擇模式'}
           </h3>
           <div className="text-sm text-gray-500">
-            {formatTime(playbackState.elapsed)} / {formatTime(totalDuration)}
+            總時長: {formatTime(totalDuration)}
           </div>
         </div>
 
-        {/* 進度條 */}
-        <div className="relative">
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${playbackState.progress}%` }}
-            />
-          </div>
-
-          {/* 可點擊的進度條 */}
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={playbackState.progress}
-            onChange={(e) => seekTo(parseFloat(e.target.value))}
-            className="absolute inset-0 w-full h-2 opacity-0 cursor-pointer"
-            disabled={!canPlay}
-          />
-        </div>
-
-        {/* 當前播放音符信息 */}
-        {playbackState.isPlaying && playbackState.currentIndex >= 0 && pattern && pattern.notes && pattern.notes[playbackState.currentIndex] && (
+        {/* 播放狀態指示器 */}
+        {isPlaying && (
           <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-blue-900">
-                正在播放: {pattern.notes[playbackState.currentIndex].name}
-                {pattern.notes[playbackState.currentIndex].octave}
-              </span>
-              <span className="text-blue-700">
-                {playbackState.currentIndex + 1} / {pattern.notes?.length || 0}
-              </span>
+            <div className="flex items-center text-sm">
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse mr-2"></div>
+              <span className="text-blue-900">正在播放模式...</span>
             </div>
           </div>
         )}
@@ -320,7 +117,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           onClick={stopPlayback}
           variant="secondary"
           size="lg"
-          disabled={!playbackState.isPlaying}
+          disabled={!isPlaying}
           icon={
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -331,39 +128,18 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         </Button>
 
         <Button
-          onClick={playbackState.isPlaying ? pausePlayback : resumePlayback}
+          onClick={playPattern}
           variant="primary"
           size="lg"
-          disabled={!canPlay}
+          disabled={!canPlay || isPlaying}
           className="px-8"
           icon={
-            playbackState.isPlaying ? (
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <rect x="6" y="4" width="4" height="16" />
-                <rect x="14" y="4" width="4" height="16" />
-              </svg>
-            ) : (
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-            )
-          }
-        >
-          {playbackState.isPlaying ? '暫停' : '播放'}
-        </Button>
-
-        <Button
-          onClick={() => playPattern()}
-          variant="secondary"
-          size="lg"
-          disabled={!canPlay}
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <polygon points="5,3 19,12 5,21" />
             </svg>
           }
         >
-          重播
+          播放
         </Button>
       </div>
 
