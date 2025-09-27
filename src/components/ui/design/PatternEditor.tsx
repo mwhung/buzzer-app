@@ -45,6 +45,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
   // 引用
   const timeoutRef = useRef<NodeJS.Timeout>();
   const isInitialMount = useRef(true);
+  const prevPatternRef = useRef<Pattern | null>(null);
 
   // 深度比較兩個Pattern是否相等
   const patternsEqual = (p1: Pattern | null, p2: Pattern | null): boolean => {
@@ -59,12 +60,13 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
     );
   };
 
-  // 同步外部pattern變更（使用深度比較）
+  // 同步外部pattern變更（修復無限循環問題）
   useEffect(() => {
-    if (pattern && !patternsEqual(pattern, editingPattern)) {
+    if (pattern && !patternsEqual(pattern, prevPatternRef.current)) {
       setEditingPattern(pattern);
+      prevPatternRef.current = pattern;
     }
-  }, [pattern, editingPattern]);
+  }, [pattern]);
 
   // 通知外部pattern變更 (避免在初始化時觸發)
   useEffect(() => {
@@ -73,7 +75,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
       return;
     }
     onPatternChange?.(editingPattern);
-  }, [editingPattern, onPatternChange]);
+  }, [editingPattern]); // 移除 onPatternChange 依賴避免無限循環
 
   // 清理effect
   useEffect(() => {

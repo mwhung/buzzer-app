@@ -61,6 +61,15 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     });
   }, [notes, currentProfile, appCore, updateNote, readOnly]);
 
+  // 調整音符時長 - 新增精確控制
+  const adjustNoteDuration = React.useCallback((index: number, change: number) => {
+    if (readOnly) return;
+
+    const note = notes[index];
+    const newDuration = Math.max(1, Math.min(10000, note.duration + change));
+    updateNote(index, { duration: newDuration });
+  }, [notes, updateNote, readOnly]);
+
   // 播放單個音符預覽
   const playNotePreview = React.useCallback(async (note: Note) => {
     if (!appCore || !currentProfile) return;
@@ -115,86 +124,153 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           </div>
 
           {/* 控制按鈕 */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
             {/* 八度調整 */}
             <div className="flex flex-col space-y-1">
-              <Button
-                onClick={() => adjustNoteOctave(index, 'up')}
-                variant="secondary"
-                size="sm"
-                disabled={readOnly || note.octave >= 8}
-                className="px-2 py-1 text-xs"
-              >
-                ↑
-              </Button>
-              <Button
-                onClick={() => adjustNoteOctave(index, 'down')}
-                variant="secondary"
-                size="sm"
-                disabled={readOnly || note.octave <= 0}
-                className="px-2 py-1 text-xs"
-              >
-                ↓
-              </Button>
+              <label className="text-xs text-gray-500 text-center">八度</label>
+              <div className="flex flex-col space-y-1">
+                <Button
+                  onClick={() => adjustNoteOctave(index, 'up')}
+                  variant="secondary"
+                  size="sm"
+                  disabled={readOnly || note.octave >= 8}
+                  className="px-2 py-1 text-xs"
+                >
+                  ↑
+                </Button>
+                <Button
+                  onClick={() => adjustNoteOctave(index, 'down')}
+                  variant="secondary"
+                  size="sm"
+                  disabled={readOnly || note.octave <= 0}
+                  className="px-2 py-1 text-xs"
+                >
+                  ↓
+                </Button>
+              </div>
             </div>
 
-            {/* 時長控制 */}
+            {/* 時長控制 - 改進版 */}
             <div className="flex flex-col space-y-1">
-              <label className="text-xs text-gray-500">時長(ms)</label>
-              <input
-                type="number"
-                min="50"
-                max="5000"
-                step="50"
-                value={note.duration}
-                onChange={(e) => updateNote(index, { duration: parseInt(e.target.value) || 500 })}
-                className="w-16 text-xs border border-gray-300 rounded px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                readOnly={readOnly}
-              />
+              <label className="text-xs text-gray-500 text-center">時長(ms)</label>
+              <div className="flex items-center space-x-1">
+                {/* 精確按鈕調整 */}
+                <div className="flex flex-col space-y-1">
+                  <div className="flex space-x-1">
+                    <Button
+                      onClick={() => adjustNoteDuration(index, -1)}
+                      variant="secondary"
+                      size="sm"
+                      disabled={readOnly || note.duration <= 1}
+                      className="px-1 py-1 text-xs w-6 h-6 flex items-center justify-center"
+                      title="減少 1ms"
+                    >
+                      -1
+                    </Button>
+                    <Button
+                      onClick={() => adjustNoteDuration(index, -10)}
+                      variant="secondary"
+                      size="sm"
+                      disabled={readOnly || note.duration <= 10}
+                      className="px-1 py-1 text-xs w-8 h-6 flex items-center justify-center"
+                      title="減少 10ms"
+                    >
+                      -10
+                    </Button>
+                  </div>
+                  <div className="flex space-x-1">
+                    <Button
+                      onClick={() => adjustNoteDuration(index, 1)}
+                      variant="secondary"
+                      size="sm"
+                      disabled={readOnly || note.duration >= 10000}
+                      className="px-1 py-1 text-xs w-6 h-6 flex items-center justify-center"
+                      title="增加 1ms"
+                    >
+                      +1
+                    </Button>
+                    <Button
+                      onClick={() => adjustNoteDuration(index, 10)}
+                      variant="secondary"
+                      size="sm"
+                      disabled={readOnly || note.duration >= 9990}
+                      className="px-1 py-1 text-xs w-8 h-6 flex items-center justify-center"
+                      title="增加 10ms"
+                    >
+                      +10
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 直接輸入框 */}
+                <input
+                  type="number"
+                  min="1"
+                  max="10000"
+                  step="1"
+                  value={note.duration}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (!isNaN(value) && value >= 1 && value <= 10000) {
+                      updateNote(index, { duration: value });
+                    }
+                  }}
+                  className="w-20 text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  readOnly={readOnly}
+                  placeholder="1-10000"
+                />
+              </div>
             </div>
 
             {/* 音量控制 */}
             <div className="flex flex-col space-y-1">
-              <label className="text-xs text-gray-500">音量</label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={note.volume || 50}
-                onChange={(e) => updateNote(index, { volume: parseInt(e.target.value) })}
-                className="w-16"
-                disabled={readOnly}
-              />
+              <label className="text-xs text-gray-500 text-center">音量</label>
+              <div className="flex items-center space-x-1">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={note.volume || 50}
+                  onChange={(e) => updateNote(index, { volume: parseInt(e.target.value) })}
+                  className="w-16"
+                  disabled={readOnly}
+                />
+                <span className="text-xs text-gray-500 w-8">
+                  {note.volume || 50}%
+                </span>
+              </div>
             </div>
 
             {/* 操作按鈕 */}
-            <Button
-              onClick={() => playNotePreview(note)}
-              variant="secondary"
-              size="sm"
-              icon={
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <polygon points="5,3 19,12 5,21" />
-                </svg>
-              }
-            >
-              試聽
-            </Button>
+            <div className="flex flex-col space-y-1">
+              <Button
+                onClick={() => playNotePreview(note)}
+                variant="secondary"
+                size="sm"
+                icon={
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <polygon points="5,3 19,12 5,21" />
+                  </svg>
+                }
+              >
+                試聽
+              </Button>
 
-            <Button
-              onClick={() => removeNote(index)}
-              variant="secondary"
-              size="sm"
-              disabled={readOnly}
-              className="text-red-600 hover:bg-red-50"
-              icon={
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              }
-            >
-              移除
-            </Button>
+              <Button
+                onClick={() => removeNote(index)}
+                variant="secondary"
+                size="sm"
+                disabled={readOnly}
+                className="text-red-600 hover:bg-red-50"
+                icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                }
+              >
+                移除
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -207,7 +283,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         )}
       </div>
     );
-  }, [currentPlayingIndex, readOnly, adjustNoteOctave, updateNote, removeNote, playNotePreview]);
+  }, [currentPlayingIndex, readOnly, adjustNoteOctave, adjustNoteDuration, updateNote, removeNote, playNotePreview]);
 
   return (
     <div className="space-y-4">

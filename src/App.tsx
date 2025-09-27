@@ -6,9 +6,10 @@ import { useBuzzerApp } from './hooks/useBuzzerApp';
 
 // UI組件導入
 import { ProfileManagerUI } from './components/ui/profile/ProfileManagerUI';
-import { MusicalBoard } from './components/ui/design/MusicalBoard';
+// import { MusicalBoard } from './components/ui/design/MusicalBoard'; // 舊版本，暫時保留
+import { SimpleMusicalBoard } from './components/ui/design/SimpleMusicalBoard';
 import { PatternEditor } from './components/ui/design/PatternEditor';
-import { PatternLibrary } from './components/ui/design/PatternLibrary';
+// import { PatternLibrary } from './components/ui/design/PatternLibrary'; // 暫時移除但保留程式碼
 import { PlaybackControls } from './components/ui/playback/PlaybackControls';
 import { ExportManager } from './components/ui/export/ExportManager';
 import { Button } from './components/ui/common/Button';
@@ -218,56 +219,38 @@ export default function App() {
 
         {workflowStage === WorkflowStages.DESIGN_WORKBENCH && (
           <div className="space-y-8">
-            {/* 設計工作台頂部 - 快速狀態信息 */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {currentProfile?.buzzer_name || '未選擇'}
-                  </div>
-                  <div className="text-sm text-gray-500">當前 Profile</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {editingPattern?.notes?.length || 0}
-                  </div>
-                  <div className="text-sm text-gray-500">編輯中音符</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">
-                    {currentPattern?.name || '未選擇'}
-                  </div>
-                  <div className="text-sm text-gray-500">當前模式</div>
-                </div>
-              </div>
-            </div>
-
-            {/* 音樂棋盤 */}
-            <MusicalBoard
-              onNoteSelect={handleNoteSelect}
-              selectedNotes={selectedNotes}
+            {/* 音樂棋盤 - 簡化版本 */}
+            <SimpleMusicalBoard
+              onNotesInsert={(notes) => {
+                // 將選擇的音符添加到編輯中的模式
+                const updatedPattern = {
+                  ...editingPattern,
+                  notes: [...(editingPattern.notes || []), ...notes],
+                  modifiedAt: new Date().toISOString()
+                };
+                setEditingPattern(updatedPattern);
+              }}
             />
 
-            {/* 雙欄佈局：模式編輯器 + 模式庫 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* 模式編輯器 */}
-              <div>
-                <PatternEditor
-                  pattern={editingPattern}
-                  onPatternChange={handlePatternChange}
-                  onSave={handlePatternSave}
-                />
-              </div>
-
-              {/* 模式庫 */}
-              <div>
-                <PatternLibrary
-                  onPatternSelect={handlePatternSelect}
-                  selectedPatternId={currentPattern?.id}
-                  onPatternEdit={handlePatternEdit}
-                />
-              </div>
+            {/* 模式編輯器 */}
+            <div>
+              <PatternEditor
+                pattern={editingPattern}
+                onPatternChange={handlePatternChange}
+                onSave={handlePatternSave}
+              />
             </div>
+
+            {/* 模式庫 - 暫時移除但保留程式碼供日後使用 */}
+            {/*
+            <div>
+              <PatternLibrary
+                onPatternSelect={handlePatternSelect}
+                selectedPatternId={currentPattern?.id}
+                onPatternEdit={handlePatternEdit}
+              />
+            </div>
+            */}
 
             {/* 播放控制 */}
             <PlaybackControls
