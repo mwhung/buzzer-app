@@ -10,8 +10,9 @@ import { ProfileManagerUI } from './components/ui/profile/ProfileManagerUI';
 import { SimpleMusicalBoard } from './components/ui/design/SimpleMusicalBoard';
 import { PatternEditor } from './components/ui/design/PatternEditor';
 // import { PatternLibrary } from './components/ui/design/PatternLibrary'; // 暫時移除但保留程式碼
-import { PlaybackControls } from './components/ui/playback/PlaybackControls';
+// import { PlaybackControls } from './components/ui/playback/PlaybackControls'; // 已移除，統一使用 EditorPlaybackControls
 import { ExportManager } from './components/ui/export/ExportManager';
+import { Filter, FilterSettings, DEFAULT_FILTER_SETTINGS } from './components/ui/design/Filter';
 import { Button } from './components/ui/common/Button';
 
 import './App.css';
@@ -30,6 +31,7 @@ export default function App() {
 
   // 本地狀態
   const [selectedNotes, setSelectedNotes] = useState<any[]>([]);
+  const [filterSettings, setFilterSettings] = useState<FilterSettings>(DEFAULT_FILTER_SETTINGS);
 
   // 創建穩定的空 pattern 初始值
   const [editingPattern, setEditingPattern] = useState<any>(() => ({
@@ -63,16 +65,92 @@ export default function App() {
 
   // 處理模式保存
   const handlePatternSave = async (pattern: any) => {
-    if (!appCore) return;
+    console.log('App.tsx handlePatternSave 被調用');
+    console.log('接收到的 pattern:', pattern);
+    console.log('pattern.notes:', pattern?.notes);
+    console.log('pattern.notes 長度:', pattern?.notes?.length);
+
+    if (!pattern) {
+      console.error('pattern 為空');
+      alert('沒有模式數據，無法保存');
+      return;
+    }
+
+    if (!pattern.name || pattern.name.trim() === '') {
+      console.error('模式名稱為空');
+      alert('請先設置模式名稱');
+      return;
+    }
+
+    // 檢查是否有音符，如果沒有音符也允許保存空模式
+    if (!pattern.notes || pattern.notes.length === 0) {
+      console.warn('模式沒有音符，但仍允許保存空模式');
+    }
+
+    if (!appCore) {
+      console.error('appCore 未初始化');
+      alert('系統未初始化，無法保存');
+      return;
+    }
 
     try {
+      // 暫時直接使用本地保存，避免 patternManager 的驗證問題
+      console.log('使用本地保存到 localStorage');
+
+      // 簡單的本地保存 - 保存到 localStorage
+      const savedPatterns = JSON.parse(localStorage.getItem('buzzer-patterns') || '[]');
+
+      // 確保 pattern 有完整的結構
+      const newPattern = {
+        id: pattern.id || `pattern-${Date.now()}`,
+        name: pattern.name || '未命名模式',
+        notes: pattern.notes || [],
+        pattern: pattern.pattern || [],
+        tempo: pattern.tempo || 120,
+        version: pattern.version || '1.0',
+        createdAt: pattern.createdAt || new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        savedAt: new Date().toISOString()
+      };
+
+      console.log('準備保存的 newPattern:', newPattern);
+
+      // 檢查是否已存在，如果存在則更新
+      const existingIndex = savedPatterns.findIndex((p: any) => p.id === newPattern.id);
+      if (existingIndex >= 0) {
+        savedPatterns[existingIndex] = newPattern;
+        console.log('更新現有模式:', newPattern.name);
+      } else {
+        savedPatterns.push(newPattern);
+        console.log('保存新模式:', newPattern.name);
+      }
+
+      localStorage.setItem('buzzer-patterns', JSON.stringify(savedPatterns));
+      console.log('保存到 localStorage 成功');
+
+      alert(`模式 "${newPattern.name}" 已保存到本地 (${newPattern.notes?.length || 0} 個音符)`);
+      return;
+
+      // 註釋掉 patternManager 的使用，因為它的驗證有問題
+      /*
+      // 檢查 patternManager 是否存在
+      if (!appCore.patternManager) {
+        // ... 本地保存邏輯已移到上面
+      }
+
+      // 使用 patternManager 保存
       const success = await appCore.patternManager.createPattern(pattern);
       if (success) {
-        setEditingPattern(null);
-        setSelectedNotes([]);
+        console.log('模式保存成功');
+        alert(`模式 "${pattern.name}" 保存成功`);
+      } else {
+        console.error('模式保存失敗');
+        alert('保存失敗，請重試');
       }
+      */
     } catch (error) {
       console.error('保存模式失敗:', error);
+      alert(`保存失敗: ${error.message || '未知錯誤'}`);
     }
   };
 
@@ -218,21 +296,35 @@ export default function App() {
         )}
 
         {workflowStage === WorkflowStages.DESIGN_WORKBENCH && (
-          <div className="space-y-8">
-            {/* 音樂棋盤 - 簡化版本 */}
-            <SimpleMusicalBoard
-              onNotesInsert={(notes) => {
-                // 將選擇的音符添加到編輯中的模式
-                const updatedPattern = {
-                  ...editingPattern,
-                  notes: [...(editingPattern.notes || []), ...notes],
-                  modifiedAt: new Date().toISOString()
-                };
-                setEditingPattern(updatedPattern);
-              }}
-            />
+          <div className="space-y-6">
+            {/* 上層：Filter + Musical Board */}
+            <div className="grid grid-cols-4 gap-6">
+              {/* 左側：Filter 區域 (1/4) */}
+              <div className="col-span-1">
+                <Filter
+                  settings={filterSettings}
+                  onSettingsChange={setFilterSettings}
+                />
+              </div>
 
-            {/* 模式編輯器 */}
+              {/* 右側：音樂棋盤 (3/4) */}
+              <div className="col-span-3">
+                <SimpleMusicalBoard
+                  filterSettings={filterSettings}
+                  onNotesInsert={(notes) => {
+                    // 將選擇的音符添加到編輯中的模式
+                    const updatedPattern = {
+                      ...editingPattern,
+                      notes: [...(editingPattern.notes || []), ...notes],
+                      modifiedAt: new Date().toISOString()
+                    };
+                    setEditingPattern(updatedPattern);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* 下層：Pattern Editor（三欄布局） */}
             <div>
               <PatternEditor
                 pattern={editingPattern}
@@ -243,7 +335,7 @@ export default function App() {
 
             {/* 模式庫 - 暫時移除但保留程式碼供日後使用 */}
             {/*
-            <div>
+            <div className="xl:col-span-12">
               <PatternLibrary
                 onPatternSelect={handlePatternSelect}
                 selectedPatternId={currentPattern?.id}
@@ -251,11 +343,6 @@ export default function App() {
               />
             </div>
             */}
-
-            {/* 播放控制 */}
-            <PlaybackControls
-              pattern={currentPattern || editingPattern}
-            />
           </div>
         )}
 

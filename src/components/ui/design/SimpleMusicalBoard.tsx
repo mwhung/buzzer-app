@@ -1,9 +1,10 @@
 // 簡化版音樂棋盤組件 - 避免無限循環問題
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Note } from '../../../types';
 import { MusicTheory } from '../../../modules/music/MusicTheory';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
+import { FilterSettings, getKeySignatureNotes } from './Filter';
 
 interface GridNote {
   noteName: string;  // 'Space', 'C', 'C#', etc.
@@ -16,20 +17,114 @@ interface GridNote {
 interface SimpleMusicalBoardProps {
   className?: string;
   onNotesInsert?: (notes: Note[]) => void;
+  filterSettings?: FilterSettings;
 }
 
 export const SimpleMusicalBoard: React.FC<SimpleMusicalBoardProps> = ({
   className = '',
-  onNotesInsert
+  onNotesInsert,
+  filterSettings
 }) => {
   const { currentProfile, appCore } = useBuzzerApp();
 
   // 已選擇的音符序列
   const [selectedSequence, setSelectedSequence] = useState<GridNote[]>([]);
 
-  // 定義音符名稱（包含 Space）
-  const noteNames = ['Space', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const octaves = [3, 4, 5, 6];
+  // 根據調性和過濾器設定生成音符排列
+  const { noteNames, octaves } = useMemo(() => {
+    // 基礎音符排列（調性影響 - 按頻率高低排列）
+    let baseNotes: string[];
+    if (filterSettings?.keySignature) {
+      const keySignature = filterSettings.keySignature;
+      // 完整的半音階
+      const allNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+      // 找到主音在半音階中的位置
+      const tonicIndex = allNotes.indexOf(keySignature);
+
+      if (tonicIndex !== -1) {
+        // 從主音開始按頻率順序排列：主音, 主音#, 主音+1, 主音+1#, ...
+        baseNotes = [];
+        for (let i = 0; i < 12; i++) {
+          const noteIndex = (tonicIndex + i) % 12;
+          baseNotes.push(allNotes[noteIndex]);
+        }
+      } else {
+        // 如果找不到主音，使用預設排列
+        baseNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      }
+    } else {
+      baseNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    }
+
+    // Space 總是在最前面
+    const finalNoteNames = ['Space', ...baseNotes];
+
+    // 八度範圍計算 - 根據頻率上下限動態計算
+    let filteredOctaves: number[];
+
+    if (filterSettings?.minFrequency || filterSettings?.maxFrequency) {
+      const minFreq = filterSettings.minFrequency || 20;
+      const maxFreq = filterSettings.maxFrequency || 20000;
+
+      // 計算最低和最高八度
+      // 從八度0到10搜索，找到包含目標頻率範圍的八度
+      const allPossibleOctaves = Array.from({ length: 11 }, (_, i) => i); // 0到10
+
+      let minOctave = 0;
+      let maxOctave = 10;
+
+      // 找到最低八度：該八度的最高音符頻率 >= minFreq
+      for (let octave = 0; octave <= 10; octave++) {
+        const highestNoteInOctave = MusicTheory.noteToFrequency('B', octave);
+        if (highestNoteInOctave >= minFreq) {
+          minOctave = octave;
+          break;
+        }
+      }
+
+      // 找到最高八度：該八度的最低音符頻率 <= maxFreq
+      for (let octave = 10; octave >= 0; octave--) {
+        const lowestNoteInOctave = MusicTheory.noteToFrequency('C', octave);
+        if (lowestNoteInOctave <= maxFreq) {
+          maxOctave = octave;
+          break;
+        }
+      }
+
+      // 生成八度範圍
+      filteredOctaves = [];
+      for (let octave = minOctave; octave <= maxOctave; octave++) {
+        filteredOctaves.push(octave);
+      }
+
+      // 確保至少有一個八度
+      if (filteredOctaves.length === 0) {
+        filteredOctaves = [4]; // 預設顯示八度4
+      }
+    } else {
+      // 沒有頻率限制時，使用預設範圍
+      filteredOctaves = [3, 4, 5, 6];
+    }
+
+    return {
+      noteNames: finalNoteNames,
+      octaves: filteredOctaves
+    };
+  }, [filterSettings?.keySignature, filterSettings?.minFrequency, filterSettings?.maxFrequency]);
+
+  // 檢查音符是否在buzzer profile的頻率範圍內
+  const isFrequencyInProfile = useCallback((frequency: number): boolean => {
+    if (!currentProfile || frequency === 0) return true; // Space 或沒有 profile 時都允許
+
+    // 檢查 profile 的頻率響應範圍
+    // 這裡假設 profile 有 frequency_response 或類似的屬性
+    // 如果沒有，可以用預設範圍 440-7000Hz
+    const minProfileFreq = 440;  // 可以從 profile 中讀取
+    const maxProfileFreq = 7000; // 可以從 profile 中讀取
+
+    return frequency >= minProfileFreq && frequency <= maxProfileFreq;
+  }, [currentProfile]);
 
   // 創建棋盤格音符
   const createGridNote = useCallback((noteName: string, octave: number): GridNote => {
@@ -44,8 +139,12 @@ export const SimpleMusicalBoard: React.FC<SimpleMusicalBoardProps> = ({
     }
 
     const frequency = MusicTheory.noteToFrequency(noteName, octave);
-    // 從 buzzer profile 計算音量
-    const volume = currentProfile && appCore
+
+    // 檢查是否在 profile 範圍內
+    const inProfile = isFrequencyInProfile(frequency);
+
+    // 從 buzzer profile 計算音量（只有在範圍內才計算）
+    const volume = currentProfile && appCore && inProfile
       ? Math.round(appCore.audioEngine.calculateVolume(frequency, currentProfile) || 0)
       : 0;
 
@@ -56,7 +155,7 @@ export const SimpleMusicalBoard: React.FC<SimpleMusicalBoardProps> = ({
       volume,
       displayName: `${noteName}${octave}`
     };
-  }, [currentProfile, appCore]);
+  }, [currentProfile, appCore, isFrequencyInProfile]);
 
   // 處理格子點擊
   const handleGridClick = useCallback((gridNote: GridNote) => {
@@ -165,17 +264,48 @@ export const SimpleMusicalBoard: React.FC<SimpleMusicalBoardProps> = ({
                     selected => selected.noteName === noteName && selected.octave === octave
                   );
 
+                  // 檢查是否在 profile 頻率範圍內
+                  const isInProfile = noteName === 'Space' || isFrequencyInProfile(gridNote.frequency);
+
+                  // 檢查是否應該 highlight（音量大於門檻）
+                  const shouldHighlight = filterSettings?.volumeHighlightEnabled &&
+                    gridNote.volume >= (filterSettings.volumeThreshold || 0) &&
+                    noteName !== 'Space' && isInProfile;
+
+                  // 檢查頻率是否在 filter 範圍內
+                  const isInFrequencyRange = noteName === 'Space' ||
+                    (!filterSettings?.minFrequency || gridNote.frequency >= filterSettings.minFrequency) &&
+                    (!filterSettings?.maxFrequency || gridNote.frequency <= filterSettings.maxFrequency);
+
+                  // 如果不在頻率範圍內，跳過渲染
+                  if (!isInFrequencyRange) {
+                    return (
+                      <div
+                        key={`${noteName}-${octave}`}
+                        className="w-20 h-16 bg-gray-100 border border-gray-200 rounded flex items-center justify-center"
+                      >
+                        <span className="text-xs text-gray-400">-</span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
                       key={`${noteName}-${octave}`}
-                      onClick={() => handleGridClick(gridNote)}
+                      onClick={() => isInProfile ? handleGridClick(gridNote) : undefined}
+                      disabled={!isInProfile}
                       className={`
                         w-20 h-16 text-xs font-medium rounded border transition-colors flex flex-col items-center justify-center p-1
-                        ${isSelected
-                          ? 'bg-blue-500 text-white border-blue-600'
-                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                        ${!isInProfile
+                          ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
+                          : isSelected
+                            ? 'bg-blue-500 text-white border-blue-600'
+                            : shouldHighlight
+                              ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200'
+                              : noteName === 'Space'
+                                ? 'bg-yellow-50 text-gray-700 border-yellow-200 hover:bg-yellow-100'
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                         }
-                        ${noteName === 'Space' ? 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100' : ''}
                       `}
                     >
                       {noteName === 'Space' ? (

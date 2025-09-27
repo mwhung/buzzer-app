@@ -132,11 +132,10 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
 
     try {
       for (let i = 0; i < editingPattern.notes.length; i++) {
-        if (!isPlaying) break;
-
         setCurrentPlayingIndex(i);
         const note = editingPattern.notes[i];
 
+        console.log(`播放音符 ${i + 1}/${editingPattern.notes.length}:`, note);
         await appCore.audioEngine.playNote(note, currentProfile);
 
         // 等待音符時長
@@ -150,7 +149,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
       setIsPlaying(false);
       setCurrentPlayingIndex(-1);
     }
-  }, [appCore, currentProfile, editingPattern.notes, isPlaying]);
+  }, [appCore, currentProfile, editingPattern.notes]);
 
   // 停止播放
   const stopPattern = React.useCallback(() => {
@@ -177,6 +176,10 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
 
   // 保存模式
   const handleSave = React.useCallback(() => {
+    console.log('PatternEditor handleSave 被調用');
+    console.log('editingPattern:', editingPattern);
+    console.log('editingPattern.notes:', editingPattern.notes);
+    console.log('editingPattern.notes length:', editingPattern.notes?.length);
     onSave?.(editingPattern);
   }, [editingPattern, onSave]);
 
@@ -207,53 +210,61 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
   }, [readOnly, isPlaying, stopPattern, playPattern, handleSave]);
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      {/* 模式元數據 */}
-      <PatternMetadata
-        pattern={editingPattern}
-        onPatternChange={handlePatternMetadataChange}
-        readOnly={readOnly}
-      />
-
-      {/* 播放控制 */}
-      <EditorPlaybackControls
-        pattern={editingPattern}
-        isPlaying={isPlaying}
-        currentPlayingIndex={currentPlayingIndex}
-        onPlayStart={playPattern}
-        onPlayStop={stopPattern}
-        onClearPattern={clearPattern}
-        onSavePattern={handleSave}
-        readOnly={readOnly}
-      />
-
-      {/* 音符編輯器 */}
-      <NoteEditor
-        notes={editingPattern.notes || []}
-        onNotesChange={handleNotesChange}
-        onNoteAdd={addNote}
-        readOnly={readOnly}
-        currentPlayingIndex={currentPlayingIndex}
-      />
-
-      {/* 使用提示 */}
-      {!readOnly && editingPattern.notes && editingPattern.notes.length === 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
-          <div className="text-blue-600 mb-3">
-            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium text-blue-900 mb-2">開始創建您的音頻模式</h3>
-          <p className="text-blue-700 mb-4">
-            使用音樂棋盤選擇音符，或者從模式庫中導入現有模式開始編輯
-          </p>
-          <div className="text-sm text-blue-600">
-            <div className="mb-1">💡 提示：您可以拖拽音符來重新排序</div>
-            <div>🎵 使用空格鍵快速播放預覽</div>
-          </div>
+    <div className={`space-y-4 ${className}`}>
+      {/* 下半部分：三欄布局 - Pattern Info + Note Editor + PlayController */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* 左欄：模式元數據 (1/4) */}
+        <div className="lg:col-span-1">
+          <PatternMetadata
+            pattern={editingPattern}
+            onPatternChange={handlePatternMetadataChange}
+            readOnly={readOnly}
+          />
         </div>
-      )}
+
+        {/* 中欄：音符編輯器 (2/4) */}
+        <div className="lg:col-span-2">
+          {!readOnly && editingPattern.notes && editingPattern.notes.length === 0 ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center h-full flex flex-col justify-center">
+              <div className="text-blue-600 mb-2">
+                <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-medium text-blue-900 mb-1">開始創建您的音頻模式</h3>
+              <p className="text-sm text-blue-700 mb-3">
+                使用音樂棋盤選擇音符開始編輯
+              </p>
+              <div className="text-xs text-blue-600 space-y-1">
+                <div>💡 可拖拽音符重新排序</div>
+                <div>🎵 空格鍵快速播放預覽</div>
+              </div>
+            </div>
+          ) : (
+            <NoteEditor
+              notes={editingPattern.notes || []}
+              onNotesChange={handleNotesChange}
+              onNoteAdd={addNote}
+              readOnly={readOnly}
+              currentPlayingIndex={currentPlayingIndex}
+            />
+          )}
+        </div>
+
+        {/* 右欄：播放控制 (1/4) */}
+        <div className="lg:col-span-1">
+          <EditorPlaybackControls
+            pattern={editingPattern}
+            isPlaying={isPlaying}
+            currentPlayingIndex={currentPlayingIndex}
+            onPlayStart={playPattern}
+            onPlayStop={stopPattern}
+            onClearPattern={clearPattern}
+            onSavePattern={handleSave}
+            readOnly={readOnly}
+          />
+        </div>
+      </div>
     </div>
   );
 };

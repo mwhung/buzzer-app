@@ -26,7 +26,10 @@ export const EditorPlaybackControls: React.FC<EditorPlaybackControlsProps> = ({
   onSavePattern,
   readOnly = false
 }) => {
-  const { currentProfile } = useBuzzerApp();
+  const { currentProfile, appCore } = useBuzzerApp();
+
+  // Master Volume 狀態
+  const [masterVolume, setMasterVolume] = React.useState(75);
 
   const canPlay = pattern.notes && pattern.notes.length > 0 && currentProfile && !isPlaying;
   const hasNotes = pattern.notes && pattern.notes.length > 0;
@@ -37,141 +40,129 @@ export const EditorPlaybackControls: React.FC<EditorPlaybackControlsProps> = ({
     return ((currentPlayingIndex + 1) / pattern.notes.length) * 100;
   }, [isPlaying, currentPlayingIndex, hasNotes, pattern.notes]);
 
+  // 處理master volume變更
+  const handleMasterVolumeChange = React.useCallback((volume: number) => {
+    setMasterVolume(volume);
+    // 這裡可以設置到全局音頻引擎或appCore中
+    if (appCore) {
+      // appCore.audioEngine.setMasterVolume(volume / 100);
+    }
+  }, [appCore]);
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">播放控制</h3>
+    <div className="bg-white rounded-lg border border-gray-200 p-4 h-full">
+      <h3 className="text-base font-semibold text-gray-900 mb-3">播放控制</h3>
 
-        {/* 播放狀態指示 */}
-        {isPlaying && (
-          <div className="flex items-center text-sm text-blue-600">
-            <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse mr-2"></div>
-            播放中 ({currentPlayingIndex + 1}/{pattern.notes?.length || 0})
-          </div>
-        )}
-      </div>
-
-      {/* 播放進度條 */}
+      {/* 播放狀態 */}
       {isPlaying && (
-        <div className="mb-4">
-          <div className="w-full bg-gray-200 rounded-full h-2">
+        <div className="mb-3">
+          <div className="flex items-center text-xs text-blue-600 mb-2">
+            <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse mr-1"></div>
+            播放中 {currentPlayingIndex + 1}/{pattern.notes?.length || 0}
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-1.5">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
               style={{ width: `${playProgress}%` }}
             />
-          </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>進度: {playProgress.toFixed(1)}%</span>
-            <span>剩餘: {pattern.notes?.length - currentPlayingIndex - 1 || 0} 音符</span>
           </div>
         </div>
       )}
 
-      {/* 主要控制按鈕 */}
-      <div className="flex items-center justify-center space-x-4 mb-6">
-        <Button
-          onClick={onPlayStop}
-          variant="secondary"
-          size="lg"
-          disabled={!isPlaying}
-          icon={
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="4" y="4" width="16" height="16" rx="2" />
-            </svg>
-          }
-        >
-          停止
-        </Button>
-
-        <Button
-          onClick={onPlayStart}
-          variant="primary"
-          size="lg"
-          disabled={!canPlay}
-          className="px-8"
-          icon={
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <polygon points="5,3 19,12 5,21" />
-            </svg>
-          }
-        >
-          播放預覽
-        </Button>
+      {/* Master Volume Control */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-gray-700 mb-2">
+          主音量 {masterVolume}%
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={masterVolume}
+          onChange={(e) => handleMasterVolumeChange(parseInt(e.target.value))}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+        />
       </div>
 
-      {/* 次要操作按鈕 */}
-      <div className="grid grid-cols-2 gap-4">
-        <Button
-          onClick={onClearPattern}
-          variant="secondary"
-          disabled={!hasNotes || readOnly}
-          icon={
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          }
+      {/* 主要控制按鈕 */}
+      <div className="space-y-3 mb-4">
+        <button
+          onClick={isPlaying ? onPlayStop : onPlayStart}
+          disabled={!hasNotes || !currentProfile}
+          className={`
+            w-full flex items-center justify-center space-x-2 py-2.5 rounded-lg font-medium text-sm transition-colors
+            ${(!hasNotes || !currentProfile)
+              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : isPlaying
+                ? 'bg-gray-600 hover:bg-gray-700 text-white'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }
+          `}
         >
-          清空模式
-        </Button>
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            {isPlaying ? (
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+            ) : (
+              <polygon points="5,3 19,12 5,21" />
+            )}
+          </svg>
+          <span>{isPlaying ? '停止' : '播放'}</span>
+        </button>
+      </div>
 
-        <Button
-          onClick={onSavePattern}
-          variant="primary"
+      {/* 次要操作 */}
+      <div className="space-y-2 mb-4">
+        <button
+          onClick={() => {
+            console.log('保存按鈕被點擊');
+            onSavePattern();
+          }}
           disabled={readOnly}
-          icon={
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-            </svg>
-          }
+          className="w-full flex items-center justify-center space-x-2 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg font-medium text-sm disabled:opacity-50 transition-colors"
         >
-          保存模式
-        </Button>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          <span>保存</span>
+        </button>
+
+        <button
+          onClick={onClearPattern}
+          disabled={!hasNotes || readOnly}
+          className="w-full flex items-center justify-center space-x-2 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg font-medium text-sm disabled:opacity-50 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span>清空</span>
+        </button>
       </div>
 
       {/* 狀態提示 */}
-      <div className="mt-4 space-y-2">
-        {!hasNotes && (
-          <div className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <div className="flex items-center">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              請先添加音符才能播放
-            </div>
-          </div>
-        )}
+      {!hasNotes && (
+        <div className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded p-2 mb-3">
+          請先添加音符
+        </div>
+      )}
 
-        {hasNotes && !currentProfile && (
-          <div className="text-sm text-yellow-600 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <div className="flex items-center">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              請先選擇 Buzzer Profile 才能播放
-            </div>
-          </div>
-        )}
+      {hasNotes && !currentProfile && (
+        <div className="text-xs text-yellow-600 bg-yellow-50 border border-yellow-200 rounded p-2 mb-3">
+          請選擇 Profile
+        </div>
+      )}
 
-        {readOnly && (
-          <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <div className="flex items-center">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              當前為只讀模式，無法編輯
-            </div>
-          </div>
-        )}
-      </div>
+      {readOnly && (
+        <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2 mb-3">
+          只讀模式
+        </div>
+      )}
 
-      {/* 快捷鍵提示 */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">快捷操作</h4>
-        <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-          <div>空格鍵: 播放/停止</div>
-          <div>Ctrl+S: 保存模式</div>
-          <div>Delete: 刪除選中音符</div>
-          <div>拖拽: 重新排序音符</div>
+      {/* 快捷鍵 */}
+      <div className="pt-3 border-t border-gray-100">
+        <h4 className="text-xs font-medium text-gray-900 mb-1">快捷鍵</h4>
+        <div className="text-xs text-gray-500 space-y-0.5">
+          <div>空格: 播放/停止</div>
+          <div>Ctrl+S: 保存</div>
         </div>
       </div>
     </div>
