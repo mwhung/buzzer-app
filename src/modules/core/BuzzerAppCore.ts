@@ -364,7 +364,7 @@ export class BuzzerAppCore {
     let pattern: Pattern | null;
 
     if (patternId) {
-      pattern = this.patternManager.getPatternById(patternId);
+      pattern = this.patternManager.getPattern(patternId);
     } else {
       pattern = this.appState.currentPattern;
     }

@@ -95,7 +95,7 @@ export default function App() {
         return { title: 'Profile 管理', description: '選擇或導入 Buzzer 音頻特性檔案' };
       case WorkflowStages.DESIGN_WORKBENCH:
         return { title: '設計工作台', description: '使用音樂棋盤和模式編輯器創建音頻序列' };
-      case WorkflowStages.EXPORT_MANAGEMENT:
+      case WorkflowStages.EXPORT_MANAGER:
         return { title: '導出管理', description: '批量選擇和導出音頻模式' };
       default:
         return { title: '未知階段', description: '' };
@@ -150,7 +150,7 @@ export default function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
                 <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${workflowStage === WorkflowStages.DESIGN_WORKBENCH ? 'bg-blue-600' : workflowStage === WorkflowStages.EXPORT_MANAGEMENT ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <div className={`w-3 h-3 rounded-full ${workflowStage === WorkflowStages.DESIGN_WORKBENCH ? 'bg-blue-600' : workflowStage === WorkflowStages.EXPORT_MANAGER ? 'bg-green-500' : 'bg-gray-300'}`} />
                   <span className={`text-sm ${workflowStage === WorkflowStages.DESIGN_WORKBENCH ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
                     設計
                   </span>
@@ -159,8 +159,8 @@ export default function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
                 <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${workflowStage === WorkflowStages.EXPORT_MANAGEMENT ? 'bg-blue-600' : 'bg-gray-300'}`} />
-                  <span className={`text-sm ${workflowStage === WorkflowStages.EXPORT_MANAGEMENT ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
+                  <div className={`w-3 h-3 rounded-full ${workflowStage === WorkflowStages.EXPORT_MANAGER ? 'bg-blue-600' : 'bg-gray-300'}`} />
+                  <span className={`text-sm ${workflowStage === WorkflowStages.EXPORT_MANAGER ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
                     導出
                   </span>
                 </div>
@@ -184,7 +184,7 @@ export default function App() {
                 </Button>
               )}
 
-              {canGoNext() && workflowStage !== WorkflowStages.EXPORT_MANAGEMENT && (
+              {canGoNext() && workflowStage !== WorkflowStages.EXPORT_MANAGER && (
                 <Button
                   onClick={goNext}
                   variant="primary"
@@ -276,7 +276,7 @@ export default function App() {
           </div>
         )}
 
-        {workflowStage === WorkflowStages.EXPORT_MANAGEMENT && (
+        {workflowStage === WorkflowStages.EXPORT_MANAGER && (
           <ExportManager />
         )}
       </main>

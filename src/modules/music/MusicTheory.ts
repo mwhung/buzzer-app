@@ -13,9 +13,9 @@ export class MusicTheory {
   /**
    * 將頻率轉換為音符資訊
    */
-  static frequencyToNote(frequency: number): Note {
+  static frequencyToNote(frequency: number, duration: number = 500): Note {
     if (frequency <= 0) {
-      return { name: '靜音', octave: 0, frequency: 0 };
+      return { name: '靜音', octave: 0, frequency: 0, duration };
     }
 
     // 計算 MIDI note number
@@ -29,7 +29,8 @@ export class MusicTheory {
     return {
       name: noteName,
       octave: Math.max(0, octave),
-      frequency: frequency
+      frequency: frequency,
+      duration
     };
   }
 
@@ -140,7 +141,8 @@ export class MusicTheory {
         octaveNotes.push({
           name: noteName,
           octave,
-          frequency
+          frequency,
+          duration: 500 // Default duration
         });
       }
 

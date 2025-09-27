@@ -12,8 +12,11 @@ export interface Pattern {
   pattern: [number, number][]; // [frequency, duration] - for backend compatibility
   notes: Note[]; // for UI components
   tempo?: number; // BPM
+  version?: string; // version number
   createdAt?: string;
   modifiedAt?: string;
+  created_at?: string; // legacy support
+  updated_at?: string; // legacy support
 }
 
 export interface Note {
@@ -22,6 +25,7 @@ export interface Note {
   frequency: number;
   duration: number; // duration in milliseconds
   spl?: number; // SPL value if available in buzzer profile
+  volume?: number; // volume percentage (0-100)
 }
 
 export interface MusicalKey {
@@ -86,4 +90,10 @@ export interface ProfileEvent {
   type: 'select' | 'create' | 'delete';
   profile?: Buzzer;
   profileId?: string;
+}
+
+export interface WorkflowEvent {
+  type: 'stage_change' | 'state_update';
+  stage?: WorkflowStages;
+  data?: any;
 }

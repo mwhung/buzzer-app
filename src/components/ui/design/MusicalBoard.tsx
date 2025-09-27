@@ -1,27 +1,18 @@
-// Musical Board 音樂棋盤組件
+// Musical Board 音樂棋盤組件 - 重構版本
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Buzzer, Note } from '../../../types';
 import { MusicTheory } from '../../../modules/music/MusicTheory';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
+import { NoteFilters, FilterOptions, FrequencyRange } from './board/NoteFilters';
+import { BoardGrid } from './board/BoardGrid';
+import { SelectedNotesDisplay } from './board/SelectedNotesDisplay';
 
 export interface MusicalBoardProps {
   className?: string;
   onNoteSelect?: (note: Note) => void;
   selectedNotes?: Note[];
   disabled?: boolean;
-}
-
-interface FrequencyRange {
-  min: number;
-  max: number;
-}
-
-interface FilterOptions {
-  octaveRange: [number, number];
-  volumeThreshold: number;
-  showOnlyHighVolume: boolean;
-  highlightBestFrequencies: boolean;
 }
 
 export const MusicalBoard: React.FC<MusicalBoardProps> = ({
@@ -88,7 +79,8 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
             octave,
             frequency,
             spl,
-            duration: 500 // 默認時長
+            duration: 500, // 默認時長
+            volume: spl // 使用SPL作為初始音量
           });
         }
       }
@@ -105,7 +97,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
   }, [availableNotes]);
 
   // 處理音符點擊
-  const handleNoteClick = (note: Note) => {
+  const handleNoteClick = React.useCallback((note: Note) => {
     if (disabled) return;
     onNoteSelect?.(note);
 
@@ -113,43 +105,30 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
     if (appCore && currentProfile) {
       appCore.audioEngine.playNote(note, currentProfile);
     }
-  };
+  }, [disabled, onNoteSelect, appCore, currentProfile]);
 
-  // 檢查音符是否被選中
-  const isNoteSelected = (note: Note) => {
-    return selectedNotes.some(
-      selected => selected.name === note.name && selected.octave === note.octave
-    );
-  };
+  // 處理音符預覽播放
+  const handlePlayPreview = React.useCallback(async (note: Note) => {
+    if (!appCore || !currentProfile) return;
 
-  // 獲取音符顏色類
-  const getNoteColorClass = (note: Note) => {
-    const isSelected = isNoteSelected(note);
-    const isBest = filters.highlightBestFrequencies &&
-                   bestNotes.has(`${note.name}${note.octave}`);
-
-    if (isSelected) {
-      return 'bg-blue-600 text-white border-blue-700';
+    try {
+      await appCore.audioEngine.playNote(note, currentProfile);
+    } catch (error) {
+      console.error('播放音符預覽失敗:', error);
     }
+  }, [appCore, currentProfile]);
 
-    if (isBest) {
-      return 'bg-green-100 text-green-900 border-green-300 hover:bg-green-200';
-    }
+  // 處理移除選中的音符
+  const handleRemoveSelectedNote = React.useCallback((index: number) => {
+    // 這個功能需要父組件提供回調
+    console.log('Remove note at index:', index);
+  }, []);
 
-    // 根據SPL值決定顏色深淺
-    const intensity = Math.min((note.spl || 0) / 80, 1);
-    const opacity = 0.1 + intensity * 0.4;
-
-    return `bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-900`;
-  };
-
-  // 獲取音符尺寸類（根據SPL值）
-  const getNoteSizeClass = (note: Note) => {
-    const spl = note.spl || 0;
-    if (spl > 70) return 'w-12 h-12 text-sm';
-    if (spl > 50) return 'w-10 h-10 text-xs';
-    return 'w-8 h-8 text-xs';
-  };
+  // 處理清空所有選中音符
+  const handleClearAllSelected = React.useCallback(() => {
+    // 這個功能需要父組件提供回調
+    console.log('Clear all selected notes');
+  }, []);
 
   if (!currentProfile) {
     return (
@@ -168,160 +147,32 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
   return (
     <div className={`space-y-6 ${className}`}>
       {/* 過濾器控制區 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">音符過濾器</h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* 八度範圍 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              八度範圍: {filters.octaveRange[0]} - {filters.octaveRange[1]}
-            </label>
-            <div className="space-y-2">
-              <input
-                type="range"
-                min="0"
-                max="8"
-                value={filters.octaveRange[0]}
-                onChange={(e) => setFilters(prev => ({
-                  ...prev,
-                  octaveRange: [parseInt(e.target.value), prev.octaveRange[1]]
-                }))}
-                className="w-full"
-              />
-              <input
-                type="range"
-                min="0"
-                max="8"
-                value={filters.octaveRange[1]}
-                onChange={(e) => setFilters(prev => ({
-                  ...prev,
-                  octaveRange: [prev.octaveRange[0], parseInt(e.target.value)]
-                }))}
-                className="w-full"
-              />
-            </div>
-          </div>
-
-          {/* 音量閾值 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              音量閾值: {filters.volumeThreshold}dB
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={filters.volumeThreshold}
-              onChange={(e) => setFilters(prev => ({
-                ...prev,
-                volumeThreshold: parseInt(e.target.value)
-              }))}
-              className="w-full"
-            />
-          </div>
-
-          {/* 切換選項 */}
-          <div className="space-y-3">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.showOnlyHighVolume}
-                onChange={(e) => setFilters(prev => ({
-                  ...prev,
-                  showOnlyHighVolume: e.target.checked
-                }))}
-                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-              />
-              <span className="ml-2 text-sm text-gray-700">僅顯示高音量音符</span>
-            </label>
-
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={filters.highlightBestFrequencies}
-                onChange={(e) => setFilters(prev => ({
-                  ...prev,
-                  highlightBestFrequencies: e.target.checked
-                }))}
-                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-              />
-              <span className="ml-2 text-sm text-gray-700">突出顯示最佳頻率</span>
-            </label>
-          </div>
-
-          {/* 統計信息 */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="text-sm text-gray-600">
-              <div>可用音符: {availableNotes.length}</div>
-              <div>已選音符: {selectedNotes.length}</div>
-              <div>頻率範圍: {frequencyRange.min}-{frequencyRange.max}Hz</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <NoteFilters
+        filters={filters}
+        onFiltersChange={setFilters}
+        frequencyRange={frequencyRange}
+        availableNotesCount={availableNotes.length}
+        selectedNotesCount={selectedNotes.length}
+      />
 
       {/* 音樂棋盤 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          音樂棋盤
-          {filters.highlightBestFrequencies && (
-            <span className="ml-2 text-sm font-normal text-green-600">
-              (綠色: 最佳音符)
-            </span>
-          )}
-        </h3>
-
-        {availableNotes.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            沒有符合條件的音符，請調整過濾器設置
-          </div>
-        ) : (
-          <div className="grid grid-cols-12 gap-2">
-            {availableNotes.map((note, index) => (
-              <button
-                key={`${note.name}${note.octave}`}
-                onClick={() => handleNoteClick(note)}
-                disabled={disabled}
-                className={`
-                  ${getNoteSizeClass(note)}
-                  ${getNoteColorClass(note)}
-                  border rounded-lg flex items-center justify-center
-                  transition-all duration-200 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                  ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                  font-medium
-                `}
-                title={`${note.name}${note.octave} (${note.frequency.toFixed(1)}Hz, ${(note.spl || 0).toFixed(1)}dB)`}
-              >
-                <div className="text-center">
-                  <div className="leading-none">{note.name}</div>
-                  <div className="text-xs opacity-75">{note.octave}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <BoardGrid
+        notes={availableNotes}
+        selectedNotes={selectedNotes}
+        bestNotes={bestNotes}
+        onNoteClick={handleNoteClick}
+        disabled={disabled}
+        highlightBest={filters.highlightBestFrequencies}
+      />
 
       {/* 選中音符顯示 */}
-      {selectedNotes.length > 0 && (
-        <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
-          <h4 className="text-md font-semibold text-blue-900 mb-3">已選音符 ({selectedNotes.length})</h4>
-          <div className="flex flex-wrap gap-2">
-            {selectedNotes.map((note, index) => (
-              <div
-                key={`selected-${note.name}${note.octave}-${index}`}
-                className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium"
-              >
-                {note.name}{note.octave}
-                <span className="ml-1 opacity-75">
-                  ({note.frequency.toFixed(0)}Hz)
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <SelectedNotesDisplay
+        selectedNotes={selectedNotes}
+        onRemoveNote={handleRemoveSelectedNote}
+        onClearAll={handleClearAllSelected}
+        onPlayPreview={handlePlayPreview}
+        readOnly={disabled}
+      />
     </div>
   );
 };

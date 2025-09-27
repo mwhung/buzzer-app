@@ -3,7 +3,7 @@
 import React from 'react';
 
 export interface ButtonProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
@@ -11,6 +11,7 @@ export interface ButtonProps {
   loading?: boolean;
   icon?: React.ReactNode;
   className?: string;
+  title?: string;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -21,7 +22,8 @@ export const Button: React.FC<ButtonProps> = ({
   size = 'md',
   loading = false,
   icon,
-  className = ''
+  className = '',
+  title
 }) => {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
 
@@ -54,6 +56,7 @@ export const Button: React.FC<ButtonProps> = ({
       className={classes}
       onClick={onClick}
       disabled={disabled || loading}
+      title={title}
     >
       {loading ? (
         <>

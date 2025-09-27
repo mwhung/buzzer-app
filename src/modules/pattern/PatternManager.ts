@@ -39,6 +39,7 @@ export class PatternManager {
           [0, 100],
           [659, 150]
         ],
+        notes: [],
         createdAt: new Date().toISOString()
       },
       {
@@ -54,6 +55,7 @@ export class PatternManager {
           [0, 200],     // 靜音間隔
           [1661, 500]   // 極低音量 (44.4dB)
         ],
+        notes: [],
         createdAt: new Date().toISOString()
       }
     ];
@@ -197,6 +199,7 @@ export class PatternManager {
       return this.createPattern({
         ...patternWithoutId,
         name: patternWithoutId.name || 'Imported Pattern',
+        notes: patternWithoutId.notes || [],
         createdAt: new Date().toISOString()
       });
     } catch (error) {
@@ -322,6 +325,7 @@ export class PatternManager {
     return this.createPattern({
       name: duplicatedName,
       pattern: [...originalPattern.pattern], // 深拷貝pattern數組
+      notes: [...originalPattern.notes], // 深拷貝notes數組
       createdAt: new Date().toISOString()
     });
   }
