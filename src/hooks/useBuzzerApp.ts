@@ -68,6 +68,9 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
     currentStage: WorkflowStages.PROFILE_MANAGEMENT
   });
 
+  // 穩定的 appCore 引用
+  const [stableAppCore, setStableAppCore] = useState<BuzzerAppCore | null>(null);
+
   // 初始化app core
   useEffect(() => {
     if (!appCoreRef.current) {
@@ -75,6 +78,9 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
         initialWorkflowStage: WorkflowStages.PROFILE_MANAGEMENT,
         defaultMasterVolume: 0.3
       });
+
+      // 設置穩定引用
+      setStableAppCore(appCoreRef.current);
 
       // 設置事件監聽器
       const appCore = appCoreRef.current;
@@ -95,6 +101,7 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
       if (appCoreRef.current) {
         appCoreRef.current.dispose();
         appCoreRef.current = null;
+        setStableAppCore(null);
       }
     };
   }, []);
@@ -115,44 +122,44 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
 
   // 快捷操作
   const playCurrentPattern = useCallback(async (): Promise<boolean> => {
-    if (!appCoreRef.current) return false;
-    return await appCoreRef.current.playCurrentPattern();
-  }, []);
+    if (!stableAppCore) return false;
+    return await stableAppCore.playCurrentPattern();
+  }, [stableAppCore]);
 
   const stopPlayback = useCallback(() => {
-    if (!appCoreRef.current) return;
-    appCoreRef.current.stopPlayback();
-  }, []);
+    if (!stableAppCore) return;
+    stableAppCore.stopPlayback();
+  }, [stableAppCore]);
 
   const exportCurrentPattern = useCallback(async (format: 'wav' | 'json' = 'wav'): Promise<boolean> => {
-    if (!appCoreRef.current) return false;
-    return await appCoreRef.current.exportCurrentPattern(format);
-  }, []);
+    if (!stableAppCore) return false;
+    return await stableAppCore.exportCurrentPattern(format);
+  }, [stableAppCore]);
 
   const clearErrors = useCallback(() => {
-    if (!appCoreRef.current) return;
-    appCoreRef.current.clearErrors();
-  }, []);
+    if (!stableAppCore) return;
+    stableAppCore.clearErrors();
+  }, [stableAppCore]);
 
   // 工作流程控制
   const goToStage = useCallback(async (stage: WorkflowStages): Promise<boolean> => {
-    if (!appCoreRef.current) return false;
-    return await appCoreRef.current.workflowManager.goToStage(stage);
-  }, []);
+    if (!stableAppCore) return false;
+    return await stableAppCore.workflowManager.goToStage(stage);
+  }, [stableAppCore]);
 
   const goBack = useCallback(async (): Promise<boolean> => {
-    if (!appCoreRef.current) return false;
-    return await appCoreRef.current.workflowManager.goBack();
-  }, []);
+    if (!stableAppCore) return false;
+    return await stableAppCore.workflowManager.goBack();
+  }, [stableAppCore]);
 
   const goNext = useCallback(async (): Promise<boolean> => {
-    if (!appCoreRef.current) return false;
-    return await appCoreRef.current.workflowManager.goNext();
-  }, []);
+    if (!stableAppCore) return false;
+    return await stableAppCore.workflowManager.goNext();
+  }, [stableAppCore]);
 
   return {
     // 核心實例
-    appCore: appCoreRef.current!,
+    appCore: stableAppCore,
 
     // 應用狀態
     appState,

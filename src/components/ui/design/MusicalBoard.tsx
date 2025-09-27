@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Buzzer, Note } from '../../../types';
 import { MusicTheory } from '../../../modules/music/MusicTheory';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
-import { NoteFilters, FilterOptions, FrequencyRange } from './board/NoteFilters';
+// import { NoteFilters, FilterOptions, FrequencyRange } from './board/NoteFilters'; // 暫時移除但保留程式碼
 import { BoardGrid } from './board/BoardGrid';
 import { SelectedNotesDisplay } from './board/SelectedNotesDisplay';
 
@@ -23,7 +23,8 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
 }) => {
   const { currentProfile, appCore } = useBuzzerApp();
 
-  // 過濾器狀態
+  // 過濾器狀態 - 暫時移除但保留程式碼
+  /*
   const [filters, setFilters] = useState<FilterOptions>({
     octaveRange: [2, 6],
     volumeThreshold: 50,
@@ -51,28 +52,24 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
       }
     }
   }, [currentProfile, appCore]);
+  */
 
-  // 生成可用音符
+  // 生成可用音符 - 簡化版本（移除過濾器邏輯）
   const availableNotes = useMemo(() => {
-    if (!currentProfile) return [];
+    if (!currentProfile || !appCore) return [];
 
     const notes: Note[] = [];
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-    // 遍歷八度範圍
-    for (let octave = filters.octaveRange[0]; octave <= filters.octaveRange[1]; octave++) {
+    // 使用固定的八度範圍（2-6）
+    for (let octave = 2; octave <= 6; octave++) {
       for (const noteName of noteNames) {
         const frequency = MusicTheory.noteToFrequency(noteName, octave);
 
-        // 檢查頻率是否在範圍內
-        if (frequency >= frequencyRange.min && frequency <= frequencyRange.max) {
+        // 使用基本的頻率範圍過濾（80-2000 Hz）
+        if (frequency >= 80 && frequency <= 2000) {
           // 計算SPL值
-          const spl = appCore?.audioEngine.calculateVolume(frequency, currentProfile) || 0;
-
-          // 應用音量過濾器
-          if (filters.showOnlyHighVolume && spl < filters.volumeThreshold) {
-            continue;
-          }
+          const spl = appCore.audioEngine.calculateVolume(frequency, currentProfile) || 0;
 
           notes.push({
             name: noteName,
@@ -87,7 +84,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
     }
 
     return notes;
-  }, [currentProfile, filters, frequencyRange, appCore?.audioEngine]);
+  }, [currentProfile, appCore]);
 
   // 獲取最佳音符（SPL值最高的前20%）
   const bestNotes = useMemo(() => {
@@ -146,7 +143,8 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* 過濾器控制區 */}
+      {/* 過濾器控制區 - 暫時移除但保留程式碼 */}
+      {/*
       <NoteFilters
         filters={filters}
         onFiltersChange={setFilters}
@@ -154,6 +152,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
         availableNotesCount={availableNotes.length}
         selectedNotesCount={selectedNotes.length}
       />
+      */}
 
       {/* 音樂棋盤 */}
       <BoardGrid
@@ -162,7 +161,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
         bestNotes={bestNotes}
         onNoteClick={handleNoteClick}
         disabled={disabled}
-        highlightBest={filters.highlightBestFrequencies}
+        highlightBest={true} // 固定啟用最佳音符高亮
       />
 
       {/* 選中音符顯示 */}

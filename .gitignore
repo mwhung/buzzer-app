@@ -4,3 +4,7 @@
 # React Router
 /.react-router/
 /build/
+
+# Claude Code / Serena MCP
+.serena/
+.claude/
