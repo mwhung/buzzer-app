@@ -312,10 +312,15 @@ export default function App() {
                 <SimpleMusicalBoard
                   filterSettings={filterSettings}
                   onNotesInsert={(notes) => {
+                    if (!notes || !Array.isArray(notes) || notes.length === 0) {
+                      return;
+                    }
+
                     // 將選擇的音符添加到編輯中的模式
+                    const currentNotes = editingPattern?.notes || [];
                     const updatedPattern = {
                       ...editingPattern,
-                      notes: [...(editingPattern.notes || []), ...notes],
+                      notes: [...currentNotes, ...notes],
                       modifiedAt: new Date().toISOString()
                     };
                     setEditingPattern(updatedPattern);

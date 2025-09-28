@@ -1,6 +1,6 @@
 // Filter 過濾器組件 - 控制音樂棋盤的顯示參數
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 // 調性定義
 const KEY_SIGNATURES = [
@@ -38,6 +38,73 @@ export const Filter: React.FC<FilterProps> = ({
   className = ''
 }) => {
 
+  // 錯誤狀態管理
+  const [errors, setErrors] = useState<{
+    minFrequency?: string;
+    maxFrequency?: string;
+  }>({});
+
+  // 臨時輸入值狀態 (允許空值和無效值)
+  const [inputValues, setInputValues] = useState<{
+    minFrequency: string;
+    maxFrequency: string;
+  }>({
+    minFrequency: settings.minFrequency.toString(),
+    maxFrequency: settings.maxFrequency.toString()
+  });
+
+  // 同步外部設定變更到內部狀態
+  useEffect(() => {
+    setInputValues({
+      minFrequency: settings.minFrequency.toString(),
+      maxFrequency: settings.maxFrequency.toString()
+    });
+  }, [settings.minFrequency, settings.maxFrequency]);
+
+  // 頻率驗證函數
+  const validateFrequency = (value: string, isMin: boolean = true): string | null => {
+    // 允許空值
+    if (value === '' || value === '0') {
+      return null;
+    }
+
+    const num = parseFloat(value);
+
+    // 檢查是否為有效數字
+    if (isNaN(num)) {
+      return '請輸入有效的數字';
+    }
+
+    // 檢查是否為負數
+    if (num < 0) {
+      return '頻率不能為負數';
+    }
+
+    // 檢查合理範圍 (蜂鳴器通常 20Hz - 20kHz)
+    if (num > 0 && num < 20) {
+      return '建議頻率至少為 20Hz';
+    }
+
+    if (num > 20000) {
+      return '建議頻率不超過 20kHz';
+    }
+
+    // 檢查最小/最大頻率邏輯關係
+    if (isMin) {
+      const maxFreq = parseFloat(inputValues.maxFrequency);
+      if (!isNaN(maxFreq) && num > maxFreq) {
+        return '最低頻率不能大於最高頻率';
+      }
+    } else {
+      const minFreq = parseFloat(inputValues.minFrequency);
+      if (!isNaN(minFreq) && num < minFreq) {
+        return '最高頻率不能小於最低頻率';
+      }
+    }
+
+    return null;
+  };
+
   // 更新設定的通用函數
   const updateSetting = <K extends keyof FilterSettings>(
     key: K,
@@ -47,6 +114,41 @@ export const Filter: React.FC<FilterProps> = ({
       ...settings,
       [key]: value
     });
+  };
+
+  // 處理頻率輸入變更
+  const handleFrequencyChange = (value: string, field: 'minFrequency' | 'maxFrequency') => {
+    // 更新臨時輸入值
+    setInputValues(prev => ({
+      ...prev,
+      [field]: value
+    }));
+
+    // 清除該欄位的錯誤
+    setErrors(prev => ({
+      ...prev,
+      [field]: undefined
+    }));
+  };
+
+  // 處理欄位失焦驗證
+  const handleFrequencyBlur = (field: 'minFrequency' | 'maxFrequency') => {
+    const value = inputValues[field];
+    const isMin = field === 'minFrequency';
+    const error = validateFrequency(value, isMin);
+
+    if (error) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: error
+      }));
+    } else {
+      // 驗證通過，更新實際設定
+      const numValue = value === '' || value === '0' ? 0 : parseFloat(value);
+      if (!isNaN(numValue)) {
+        updateSetting(field, numValue);
+      }
+    }
   };
 
   return (
@@ -62,27 +164,53 @@ export const Filter: React.FC<FilterProps> = ({
           <div className="space-y-2">
             <div>
               <label className="block text-xs text-gray-500 mb-1">最低頻率</label>
-              <input
-                type="number"
-                min="20"
-                max="20000"
-                step="10"
-                value={settings.minFrequency}
-                onChange={(e) => updateSetting('minFrequency', parseInt(e.target.value) || 20)}
-                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+              <div>
+                <input
+                  type="number"
+                  value={inputValues.minFrequency}
+                  onChange={(e) => handleFrequencyChange(e.target.value, 'minFrequency')}
+                  onBlur={() => handleFrequencyBlur('minFrequency')}
+                  placeholder="輸入頻率值 (Hz)"
+                  className={`w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 ${
+                    errors.minFrequency
+                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
+                />
+                {errors.minFrequency && (
+                  <div className="flex items-start mt-1">
+                    <svg className="w-3 h-3 text-red-500 mt-0.5 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-xs text-red-600">{errors.minFrequency}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">最高頻率</label>
-              <input
-                type="number"
-                min="20"
-                max="20000"
-                step="10"
-                value={settings.maxFrequency}
-                onChange={(e) => updateSetting('maxFrequency', parseInt(e.target.value) || 20000)}
-                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+              <div>
+                <input
+                  type="number"
+                  value={inputValues.maxFrequency}
+                  onChange={(e) => handleFrequencyChange(e.target.value, 'maxFrequency')}
+                  onBlur={() => handleFrequencyBlur('maxFrequency')}
+                  placeholder="輸入頻率值 (Hz)"
+                  className={`w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 ${
+                    errors.maxFrequency
+                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
+                />
+                {errors.maxFrequency && (
+                  <div className="flex items-start mt-1">
+                    <svg className="w-3 h-3 text-red-500 mt-0.5 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-xs text-red-600">{errors.maxFrequency}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

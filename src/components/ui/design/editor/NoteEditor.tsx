@@ -1,6 +1,6 @@
 // Note Editor 音符編輯組件
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Note, Buzzer } from '../../../../types';
 import { MusicTheory } from '../../../../modules/music/MusicTheory';
 import { useBuzzerApp } from '../../../../hooks/useBuzzerApp';
@@ -24,15 +24,85 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 }) => {
   const { currentProfile, appCore } = useBuzzerApp();
 
-  // 移除音符
-  const removeNote = React.useCallback((index: number) => {
-    if (readOnly) return;
+  // 簡化的錯誤和輸入狀態管理
+  const [durationErrors, setDurationErrors] = useState<{[index: number]: string}>({});
+  const [durationInputs, setDurationInputs] = useState<{[index: number]: string}>({});
 
-    const newNotes = notes.filter((_, i) => i !== index);
-    onNotesChange(newNotes);
-  }, [notes, onNotesChange, readOnly]);
+  // 同步外部 notes 變化到內部狀態
+  useEffect(() => {
+    // 當 notes 數組變化時，清理不存在的索引並重置狀態
+    setDurationInputs(prev => {
+      const newInputs: {[index: number]: string} = {};
+      notes.forEach((note, index) => {
+        // 保留已存在的輸入值，或使用音符的當前時長
+        newInputs[index] = prev[index] ?? String(note.duration);
+      });
+      return newInputs;
+    });
 
-  // 更新音符
+    // 清理錯誤狀態中不存在的索引
+    setDurationErrors(prev => {
+      const newErrors: {[index: number]: string} = {};
+      Object.keys(prev).forEach(key => {
+        const index = parseInt(key);
+        if (index < notes.length) {
+          newErrors[index] = prev[index];
+        }
+      });
+      return newErrors;
+    });
+  }, [notes]);
+
+  // Duration驗證函數
+  const validateDuration = (value: string): string | null => {
+    // 允許空值
+    if (value === '') {
+      return null;
+    }
+
+    const num = parseFloat(value);
+
+    // 檢查是否為有效數字
+    if (isNaN(num)) {
+      return '請輸入有效的數字';
+    }
+
+    // 檢查是否為負數
+    if (num < 0) {
+      return '時長不能為負數';
+    }
+
+    // 只提供建議，不阻止保存
+    // 檢查合理範圍 (音符時長通常 10ms - 5000ms)
+    if (num > 0 && num < 1) {
+      return '建議時長至少為 1ms';
+    }
+
+    if (num > 10000) {
+      return '建議時長不超過 10000ms';
+    }
+
+    return null;
+  };
+
+  // 處理Duration輸入變更 - 簡化版本
+  const handleDurationChange = (value: string, noteIndex: number) => {
+    setDurationInputs(prev => ({
+      ...prev,
+      [noteIndex]: value
+    }));
+
+    // 清除該欄位的錯誤
+    if (durationErrors[noteIndex]) {
+      setDurationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[noteIndex];
+        return newErrors;
+      });
+    }
+  };
+
+  // 更新音符 - 移到前面避免變數提升問題
   const updateNote = React.useCallback((index: number, updates: Partial<Note>) => {
     if (readOnly) return;
 
@@ -41,6 +111,70 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     );
     onNotesChange(newNotes);
   }, [notes, onNotesChange, readOnly]);
+
+  // 移除音符
+  const removeNote = React.useCallback((index: number) => {
+    if (readOnly) return;
+
+    const newNotes = notes.filter((_, i) => i !== index);
+    onNotesChange(newNotes);
+  }, [notes, onNotesChange, readOnly]);
+
+  // 重置特定音符的輸入狀態
+  const resetNoteInputState = React.useCallback((noteIndex: number) => {
+    setDurationInputs(prev => {
+      const newInputs = { ...prev };
+      delete newInputs[noteIndex];
+      return newInputs;
+    });
+    setDurationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[noteIndex];
+      return newErrors;
+    });
+  }, []);
+
+  // 處理Duration欄位失焦驗證 - 改進版本
+  const handleDurationBlur = React.useCallback((noteIndex: number) => {
+    const value = durationInputs[noteIndex] || '';
+    const error = validateDuration(value);
+
+    if (error) {
+      setDurationErrors(prev => ({
+        ...prev,
+        [noteIndex]: error
+      }));
+    } else {
+      // 清除錯誤狀態
+      setDurationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[noteIndex];
+        return newErrors;
+      });
+
+      // 驗證通過，更新實際音符
+      if (value === '') {
+        // 空值時恢復原值
+        setDurationInputs(prev => ({
+          ...prev,
+          [noteIndex]: String(notes[noteIndex]?.duration || 100)
+        }));
+      } else {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue) && numValue >= 0) {
+          updateNote(noteIndex, { duration: numValue });
+          // 成功更新後，清除輸入狀態讓它使用新的 notes 值
+          setTimeout(() => {
+            setDurationInputs(prev => {
+              const newInputs = { ...prev };
+              delete newInputs[noteIndex];
+              return newInputs;
+            });
+          }, 0);
+        }
+      }
+    }
+  }, [durationInputs, notes, updateNote, validateDuration]);
 
   // 調整音符八度
   const adjustNoteOctave = React.useCallback((index: number, direction: 'up' | 'down') => {
@@ -86,6 +220,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     onNotesChange(newNotes);
   }, [onNotesChange]);
 
+  // 生成穩定的音符 key
+  const getNoteKey = React.useCallback((note: Note, index: number) => {
+    // 使用音符的唯一特性組合作為穩定的 key，避免使用 index
+    return `${note.name}-${note.octave}-${note.frequency}-${index}`;
+  }, []);
+
   // 渲染音符項目
   const renderNoteItem = React.useCallback((note: Note, index: number, dragProps: DragHandlers) => {
     const isPlaying = currentPlayingIndex === index;
@@ -95,9 +235,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
     return (
       <div
-        key={`note-${index}`}
-        draggable={!readOnly}
-        onDragStart={(e) => dragProps.onDragStart(e, index)}
+        key={getNoteKey(note, index)}
         onDragOver={(e) => dragProps.onDragOver(e, index)}
         onDrop={(e) => dragProps.onDrop(e, index)}
         onDragEnd={dragProps.onDragEnd}
@@ -106,22 +244,37 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           ${isDraggedItem ? 'opacity-50 scale-95' : ''}
           ${isDropTarget ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
           ${isPlaying ? 'ring-2 ring-blue-500 bg-blue-50' : ''}
-          ${!readOnly ? 'cursor-move' : ''}
         `}
       >
         <div className="space-y-3">
           {/* 頂部：音符信息和主要控制 */}
           <div className="flex items-center justify-between">
-            {/* 音符信息 */}
+            {/* 左側：拖曳手柄 + 音符信息 */}
             <div className="flex items-center space-x-3">
-              <div className="text-base font-bold text-gray-900">
-                {note.name}{note.octave}
-              </div>
-              <div className="text-xs text-gray-500">
-                {note.frequency.toFixed(1)}Hz
-              </div>
-              <div className="text-xs text-gray-500">
-                {(note.spl || 0).toFixed(1)}dB
+              {/* 拖曳手柄 - 僅在左上角 */}
+              {!readOnly && (
+                <div
+                  draggable={true}
+                  onDragStart={(e) => dragProps.onDragStart(e, index)}
+                  className="cursor-move p-1 hover:bg-gray-100 rounded transition-colors"
+                  title="拖曳以重新排序"
+                >
+                  <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                  </svg>
+                </div>
+              )}
+
+              {/* 音符信息 */}
+              <div>
+                <div className="text-base font-bold text-gray-900">
+                  {note.name}{note.octave}
+                </div>
+                <div className="text-xs text-gray-500 space-x-2">
+                  <span>{note.frequency.toFixed(1)}Hz</span>
+                  <span>•</span>
+                  <span>{(note.spl || 0).toFixed(1)}dB</span>
+                </div>
               </div>
             </div>
 
@@ -176,37 +329,46 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             {/* 時長控制 */}
             <div>
               <label className="block text-gray-500 mb-1">時長(ms)</label>
-              <div className="flex items-center space-x-1">
-                <button
-                  onClick={() => adjustNoteDuration(index, -10)}
-                  disabled={readOnly || note.duration <= 10}
-                  className="w-6 h-6 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded text-xs"
-                  title="減少 10ms"
-                >
-                  -
-                </button>
-                <input
-                  type="number"
-                  min="1"
-                  max="10000"
-                  value={note.duration}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    if (!isNaN(value) && value >= 1 && value <= 10000) {
-                      updateNote(index, { duration: value });
-                    }
-                  }}
-                  className="flex-1 text-xs border border-gray-300 rounded px-1 py-1 text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  readOnly={readOnly}
-                />
-                <button
-                  onClick={() => adjustNoteDuration(index, 10)}
-                  disabled={readOnly || note.duration >= 9990}
-                  className="w-6 h-6 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded text-xs"
-                  title="增加 10ms"
-                >
-                  +
-                </button>
+              <div>
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => adjustNoteDuration(index, -10)}
+                    disabled={readOnly || note.duration <= 10}
+                    className="w-6 h-6 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded text-xs"
+                    title="減少 10ms"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    value={durationInputs[index] ?? String(note.duration)}
+                    onChange={(e) => handleDurationChange(e.target.value, index)}
+                    onBlur={() => handleDurationBlur(index)}
+                    placeholder="輸入時長 (ms)"
+                    className={`flex-1 text-xs border rounded px-2 py-1 text-center focus:outline-none focus:ring-1 ${
+                      durationErrors[index]
+                        ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                        : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                    }`}
+                    readOnly={readOnly}
+                  />
+                  <button
+                    onClick={() => adjustNoteDuration(index, 10)}
+                    disabled={readOnly || note.duration >= 5000}
+                    className="w-6 h-6 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 rounded text-xs"
+                    title="增加 10ms"
+                  >
+                    +
+                  </button>
+                </div>
+                {durationErrors[index] && (
+                  <div className="flex items-start mt-1">
+                    <svg className="w-3 h-3 text-red-500 mt-0.5 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-xs text-red-600">{durationErrors[index]}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -221,7 +383,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         )}
       </div>
     );
-  }, [currentPlayingIndex, readOnly, adjustNoteOctave, adjustNoteDuration, updateNote, removeNote, playNotePreview]);
+  }, [currentPlayingIndex, readOnly, adjustNoteOctave, adjustNoteDuration, updateNote, removeNote, playNotePreview, durationInputs, durationErrors, handleDurationChange, handleDurationBlur, getNoteKey]);
 
   return (
     <div className="space-y-3">
@@ -250,7 +412,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         >
           {(dragProps) => (
             <div className="space-y-2">
-              {notes.map((note, index) => renderNoteItem(note, index, dragProps))}
+              {notes.map((note, index) => (
+                <div key={getNoteKey(note, index)}>
+                  {renderNoteItem(note, index, dragProps)}
+                </div>
+              ))}
             </div>
           )}
         </DragAndDrop>

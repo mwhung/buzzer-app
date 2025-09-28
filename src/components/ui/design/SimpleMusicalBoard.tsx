@@ -189,17 +189,21 @@ export const SimpleMusicalBoard: React.FC<SimpleMusicalBoardProps> = ({
   const handleInsertToPattern = useCallback(() => {
     if (selectedSequence.length === 0) return;
 
-    // 轉換為 Note 格式
-    const notes: Note[] = selectedSequence.map(gridNote => ({
-      name: gridNote.noteName,
-      octave: gridNote.octave,
-      frequency: gridNote.frequency,
-      duration: 500,
-      volume: gridNote.volume // 使用 buzzer profile 計算的音量
-    }));
+    // 轉換為 Note 格式，過濾掉 Space 音符
+    const notes: Note[] = selectedSequence
+      .filter(gridNote => gridNote.noteName !== 'Space')
+      .map(gridNote => ({
+        name: gridNote.noteName,
+        octave: gridNote.octave,
+        frequency: gridNote.frequency,
+        duration: 500,
+        spl: gridNote.volume
+      }));
 
-    // 傳遞給父組件
-    onNotesInsert?.(notes);
+    // 只有當有有效音符時才調用
+    if (notes.length > 0) {
+      onNotesInsert?.(notes);
+    }
 
     // 清空選擇
     setSelectedSequence([]);
