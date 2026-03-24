@@ -330,6 +330,13 @@ export class PatternManager {
   }
 
   /**
+   * 直接載入 pattern（從儲存恢復時使用，不觸發事件）
+   */
+  loadPatternDirect(patternId: string, pattern: Pattern): void {
+    this.patterns.set(patternId, { ...pattern, id: patternId });
+  }
+
+  /**
    * 獲取pattern
    */
   getPattern(patternId: string): Pattern | null {

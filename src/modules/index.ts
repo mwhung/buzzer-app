@@ -21,6 +21,15 @@ export { PatternManager, type PatternValidationResult, type PatternStats } from 
 // 導出引擎模組
 export { ExportEngine, type ExportTask, type ExportProgress } from './export/ExportEngine';
 
+// 儲存管理模組
+export {
+  StorageManager,
+  type StoredProfile,
+  type StoredPattern,
+  type PatternVersion,
+  type StorageStats
+} from './storage/StorageManager';
+
 // 工作流程管理模組
 export {
   WorkflowManager,

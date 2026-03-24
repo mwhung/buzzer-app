@@ -1,7 +1,7 @@
 // React Hook for Buzzer App Core integration
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { BuzzerAppCore, AppState, Buzzer, Pattern, WorkflowStages } from '../modules';
+import { BuzzerAppCore, AppState, Buzzer, Pattern, WorkflowStages, PatternVersion } from '../modules';
 
 export interface UseBuzzerAppReturn {
   // 核心實例
@@ -33,6 +33,11 @@ export interface UseBuzzerAppReturn {
   goToStage: (stage: WorkflowStages) => Promise<boolean>;
   goBack: () => Promise<boolean>;
   goNext: () => Promise<boolean>;
+
+  // 儲存操作
+  saveAll: () => Promise<void>;
+  getPatternVersions: (patternId: string) => Promise<PatternVersion[]>;
+  restorePatternVersion: (versionId: string) => Promise<boolean>;
 
   // 統計信息
   statistics: {
@@ -152,6 +157,22 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
     return await appCoreRef.current.workflowManager.goNext();
   }, []);
 
+  // 儲存操作
+  const saveAll = useCallback(async (): Promise<void> => {
+    if (!appCoreRef.current) return;
+    await appCoreRef.current.saveAll();
+  }, []);
+
+  const getPatternVersions = useCallback(async (patternId: string): Promise<PatternVersion[]> => {
+    if (!appCoreRef.current) return [];
+    return await appCoreRef.current.getPatternVersions(patternId);
+  }, []);
+
+  const restorePatternVersion = useCallback(async (versionId: string): Promise<boolean> => {
+    if (!appCoreRef.current) return false;
+    return await appCoreRef.current.restorePatternVersion(versionId);
+  }, []);
+
   return {
     // 核心實例
     appCore: appCoreRef.current!,
@@ -182,6 +203,11 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
     goToStage,
     goBack,
     goNext,
+
+    // 儲存操作
+    saveAll,
+    getPatternVersions,
+    restorePatternVersion,
 
     // 統計信息
     statistics

@@ -186,6 +186,13 @@ export class ProfileManager {
   }
 
   /**
+   * 直接載入 profile（從儲存恢復時使用，不觸發事件）
+   */
+  loadProfileDirect(profileId: string, profile: Buzzer): void {
+    this.profiles.set(profileId, { ...profile });
+  }
+
+  /**
    * 獲取profile
    */
   getProfile(profileId: string): Buzzer | null {
