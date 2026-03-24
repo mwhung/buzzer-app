@@ -1,6 +1,6 @@
 // Profile管理界面組件
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Buzzer } from '../../../types';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 import { Card } from '../common/Card';
@@ -182,10 +182,7 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
                 {/* 選擇按鈕 */}
                 <Button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelectProfile(id);
-                  }}
+                  onClick={() => handleSelectProfile(id)}
                   variant={isSelected ? 'success' : 'primary'}
                   size="sm"
                   className="w-full"

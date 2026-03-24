@@ -99,7 +99,7 @@ export class AudioEngine {
       await this.playTone(note.frequency, note.duration || 500, buzzerProfile);
     } catch (error) {
       console.error('AudioEngine: 播放音符失敗', error);
-      this.emitEvent('error', { message: '播放音符失敗', details: error });
+      this.emitEvent({ type: 'stop' });
     }
   }
 

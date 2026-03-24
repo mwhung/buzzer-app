@@ -1,7 +1,7 @@
 // Playback Controls 播放控制組件
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Pattern } from '../../../types';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Pattern, Note } from '../../../types';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 import { Button } from '../common/Button';
 
@@ -46,9 +46,13 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const [loopMode, setLoopMode] = useState(false);
   const [randomMode, setRandomMode] = useState(false);
 
-  // 引用
-  const playbackTimerRef = useRef<NodeJS.Timeout>();
-  const progressTimerRef = useRef<NodeJS.Timeout>();
+  // Refs for async playback control (fixes stale closure bug)
+  const isPlayingRef = useRef(false);
+  const loopModeRef = useRef(false);
+  const playbackTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Sync refs with state
+  useEffect(() => { loopModeRef.current = loopMode; }, [loopMode]);
 
   // 計算總時長
   const totalDuration = pattern && pattern.notes && Array.isArray(pattern.notes) ?
@@ -70,9 +74,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     onVolumeChange?.(isMuted ? 0 : masterVolume);
   }, [masterVolume, isMuted, appCore, onVolumeChange]);
 
-  // 播放模式
-  const playPattern = async () => {
+  // 播放模式 — 使用 ref 避免閉包陷阱
+  const playPattern = useCallback(async () => {
     if (!pattern || !currentProfile || !appCore || disabled) return;
+
+    // Cancel any existing playback
+    isPlayingRef.current = true;
 
     setPlaybackState(prev => ({
       ...prev,
@@ -82,19 +89,18 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       progress: 0
     }));
 
-    const playNotes = async (notes: any[], startIndex = 0) => {
+    const playNotes = async (notes: Note[], startIndex = 0) => {
       let elapsed = 0;
 
       for (let i = startIndex; i < notes.length; i++) {
-        if (!playbackState.isPlaying && playbackState.currentIndex === -1) {
-          break; // 被手動停止
-        }
+        // Check ref instead of stale state
+        if (!isPlayingRef.current) break;
 
         setPlaybackState(prev => ({
           ...prev,
           currentIndex: i,
           elapsed,
-          progress: (elapsed / totalDuration) * 100
+          progress: totalDuration > 0 ? (elapsed / totalDuration) * 100 : 0
         }));
 
         const note = notes[i];
@@ -102,11 +108,11 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
         // 等待音符時長，同時更新進度
         const stepDuration = note.duration;
-        const stepSize = 50; // 50ms 更新一次
+        const stepSize = 50;
         const steps = Math.ceil(stepDuration / stepSize);
 
         for (let step = 0; step < steps; step++) {
-          if (!playbackState.isPlaying) break;
+          if (!isPlayingRef.current) break;
 
           await new Promise(resolve => {
             playbackTimerRef.current = setTimeout(resolve, stepSize);
@@ -116,16 +122,16 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           setPlaybackState(prev => ({
             ...prev,
             elapsed,
-            progress: (elapsed / totalDuration) * 100
+            progress: totalDuration > 0 ? (elapsed / totalDuration) * 100 : 0
           }));
         }
       }
 
-      // 播放完成
-      if (loopMode && playbackState.isPlaying) {
-        // 循環播放
+      // 播放完成 — check ref for loop
+      if (loopModeRef.current && isPlayingRef.current) {
         await playNotes(notes, 0);
       } else {
+        isPlayingRef.current = false;
         setPlaybackState(prev => ({
           ...prev,
           isPlaying: false,
@@ -140,10 +146,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       (pattern.notes || []);
 
     await playNotes(notesToPlay);
-  };
+  }, [pattern, currentProfile, appCore, disabled, totalDuration, randomMode]);
 
   // 停止播放
-  const stopPlayback = () => {
+  const stopPlayback = useCallback(() => {
+    isPlayingRef.current = false;
+
     setPlaybackState(prev => ({
       ...prev,
       isPlaying: false,
@@ -155,15 +163,14 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     if (playbackTimerRef.current) {
       clearTimeout(playbackTimerRef.current);
     }
-    if (progressTimerRef.current) {
-      clearTimeout(progressTimerRef.current);
-    }
 
     appCore?.stopPlayback();
-  };
+  }, [appCore]);
 
   // 暫停播放
-  const pausePlayback = () => {
+  const pausePlayback = useCallback(() => {
+    isPlayingRef.current = false;
+
     setPlaybackState(prev => ({
       ...prev,
       isPlaying: false
@@ -174,54 +181,45 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     }
 
     appCore?.stopPlayback();
-  };
+  }, [appCore]);
 
   // 繼續播放
-  const resumePlayback = async () => {
-    if (!pattern || playbackState.currentIndex === -1) {
-      await playPattern();
-      return;
-    }
-
-    setPlaybackState(prev => ({
-      ...prev,
-      isPlaying: true
-    }));
-
-    // 從當前位置繼續播放
-    // 這裡簡化處理，重新開始播放
+  const resumePlayback = useCallback(async () => {
     await playPattern();
-  };
+  }, [playPattern]);
 
   // 音量控制
-  const handleVolumeChange = (value: number) => {
+  const handleVolumeChange = useCallback((value: number) => {
     setMasterVolume(value);
-    if (isMuted && value > 0) {
+    if (value > 0) {
       setIsMuted(false);
     }
-  };
+  }, []);
 
   // 靜音切換
-  const toggleMute = () => {
-    if (isMuted) {
-      setIsMuted(false);
-      setMasterVolume(previousVolume);
-    } else {
-      setPreviousVolume(masterVolume);
-      setIsMuted(true);
-    }
-  };
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => {
+      if (prev) {
+        setMasterVolume(previousVolume);
+        return false;
+      } else {
+        setPreviousVolume(masterVolume);
+        return true;
+      }
+    });
+  }, [masterVolume, previousVolume]);
 
-  // 快進/快退（跳到指定位置）
-  const seekTo = (percentage: number) => {
+  // 快進/快退
+  const seekTo = useCallback((percentage: number) => {
     if (!pattern) return;
 
     const targetTime = (percentage / 100) * totalDuration;
     let accumulated = 0;
     let targetIndex = 0;
+    const notes = pattern.notes || [];
 
-    for (let i = 0; i < (pattern.notes || []).length; i++) {
-      accumulated += (pattern.notes || [])[i].duration;
+    for (let i = 0; i < notes.length; i++) {
+      accumulated += notes[i].duration;
       if (accumulated >= targetTime) {
         targetIndex = i;
         break;
@@ -235,11 +233,10 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       progress: percentage
     }));
 
-    if (playbackState.isPlaying) {
-      // 如果正在播放，從新位置繼續
+    if (isPlayingRef.current) {
       playPattern();
     }
-  };
+  }, [pattern, totalDuration, playPattern]);
 
   // 格式化時間顯示
   const formatTime = (milliseconds: number) => {
@@ -252,11 +249,9 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   // 清理定時器
   useEffect(() => {
     return () => {
+      isPlayingRef.current = false;
       if (playbackTimerRef.current) {
         clearTimeout(playbackTimerRef.current);
-      }
-      if (progressTimerRef.current) {
-        clearTimeout(progressTimerRef.current);
       }
     };
   }, []);

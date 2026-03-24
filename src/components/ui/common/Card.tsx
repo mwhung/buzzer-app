@@ -10,6 +10,7 @@ export interface CardProps {
   actions?: React.ReactNode;
   className?: string;
   variant?: 'default' | 'highlighted' | 'minimal';
+  onClick?: (e?: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -19,7 +20,8 @@ export const Card: React.FC<CardProps> = ({
   icon,
   actions,
   className = '',
-  variant = 'default'
+  variant = 'default',
+  onClick,
 }) => {
   const baseClasses = 'rounded-xl border transition-all duration-200';
 
@@ -32,7 +34,7 @@ export const Card: React.FC<CardProps> = ({
   const cardClasses = `${baseClasses} ${variantClasses[variant]} ${className}`;
 
   return (
-    <div className={cardClasses}>
+    <div className={cardClasses} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}>
       {(title || subtitle || icon || actions) && (
         <div className="flex items-center justify-between p-6 pb-4">
           <div className="flex items-center space-x-3">

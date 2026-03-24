@@ -40,6 +40,7 @@ export interface UseBuzzerAppReturn {
     patternCount: number;
     totalPatternDuration: number;
     currentStage: string;
+    playbackTime: number;
   };
 }
 
@@ -65,7 +66,8 @@ export function useBuzzerApp(): UseBuzzerAppReturn {
     profileCount: 0,
     patternCount: 0,
     totalPatternDuration: 0,
-    currentStage: WorkflowStages.PROFILE_MANAGEMENT
+    currentStage: WorkflowStages.PROFILE_MANAGEMENT as string,
+    playbackTime: 0
   });
 
   // 初始化app core

@@ -1,7 +1,7 @@
 // Musical Board 音樂棋盤組件
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Buzzer, Note } from '../../../types';
+import { useState, useEffect, useMemo, memo } from 'react';
+import { Note } from '../../../types';
 import { MusicTheory } from '../../../modules/music/MusicTheory';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 
@@ -24,7 +24,7 @@ interface FilterOptions {
   highlightBestFrequencies: boolean;
 }
 
-export const MusicalBoard: React.FC<MusicalBoardProps> = ({
+export const MusicalBoard: React.FC<MusicalBoardProps> = memo(({
   className = '',
   onNoteSelect,
   selectedNotes = [],
@@ -99,10 +99,16 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
 
   // 獲取最佳音符（音量最高的前20%）
   const bestNotes = useMemo(() => {
-    const sortedByVolume = [...availableNotes].sort((a, b) => b.volume - a.volume);
+    const sortedByVolume = [...availableNotes].sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
     const topCount = Math.ceil(sortedByVolume.length * 0.2);
     return new Set(sortedByVolume.slice(0, topCount).map(note => `${note.name}${note.octave}`));
   }, [availableNotes]);
+
+  // O(1) 音符選擇查找
+  const selectedNoteKeys = useMemo(
+    () => new Set(selectedNotes.map(n => `${n.name}${n.octave}`)),
+    [selectedNotes]
+  );
 
   // 處理音符點擊
   const handleNoteClick = (note: Note) => {
@@ -115,11 +121,9 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
     }
   };
 
-  // 檢查音符是否被選中
+  // 檢查音符是否被選中 (O(1))
   const isNoteSelected = (note: Note) => {
-    return selectedNotes.some(
-      selected => selected.name === note.name && selected.octave === note.octave
-    );
+    return selectedNoteKeys.has(`${note.name}${note.octave}`);
   };
 
   // 獲取音符顏色類
@@ -136,17 +140,14 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
       return 'bg-green-100 text-green-900 border-green-300 hover:bg-green-200';
     }
 
-    // 根據音量決定顏色深淺
-    const intensity = Math.min(note.volume / 80, 1);
-    const opacity = 0.1 + intensity * 0.4;
-
     return `bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-900`;
   };
 
   // 獲取音符尺寸類（根據音量）
   const getNoteSizeClass = (note: Note) => {
-    if (note.volume > 70) return 'w-12 h-12 text-sm';
-    if (note.volume > 50) return 'w-10 h-10 text-xs';
+    const vol = note.volume ?? 0;
+    if (vol > 70) return 'w-12 h-12 text-sm';
+    if (vol > 50) return 'w-10 h-10 text-xs';
     return 'w-8 h-8 text-xs';
   };
 
@@ -277,7 +278,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-12 gap-2">
-            {availableNotes.map((note, index) => (
+            {availableNotes.map((note) => (
               <button
                 key={`${note.name}${note.octave}`}
                 onClick={() => handleNoteClick(note)}
@@ -290,7 +291,7 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
                   ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                   font-medium
                 `}
-                title={`${note.name}${note.octave} (${note.frequency.toFixed(1)}Hz, ${note.volume.toFixed(1)}dB)`}
+                title={`${note.name}${note.octave} (${note.frequency.toFixed(1)}Hz, ${(note.volume ?? 0).toFixed(1)}dB)`}
               >
                 <div className="text-center">
                   <div className="leading-none">{note.name}</div>
@@ -323,4 +324,4 @@ export const MusicalBoard: React.FC<MusicalBoardProps> = ({
       )}
     </div>
   );
-};
+});

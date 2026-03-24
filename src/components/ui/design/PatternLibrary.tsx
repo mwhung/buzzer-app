@@ -1,6 +1,6 @@
 // Pattern Library 模式庫管理組件
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Pattern } from '../../../types';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 import { Card } from '../common/Card';
@@ -92,8 +92,8 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
       ...pattern,
       id: `pattern-${Date.now()}`,
       name: `${pattern.name} (副本)`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      modifiedAt: new Date().toISOString()
     };
 
     const success = await appCore.patternManager.createPattern(duplicatedPattern);
@@ -120,7 +120,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
     if (selectedPatterns.size === patterns.length) {
       setSelectedPatterns(new Set());
     } else {
-      setSelectedPatterns(new Set(patterns.map(p => p.id)));
+      setSelectedPatterns(new Set(patterns.map(p => p.id).filter((id): id is string => !!id)));
     }
   };
 
@@ -131,8 +131,10 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
     setExportState({ loading: true });
 
     try {
-      const patternsToExport = patterns.filter(p => selectedPatterns.has(p.id));
-      const exported = await appCore.exportEngine.exportPatterns(patternsToExport, 'json');
+      const patternsToExport = patterns.filter(p => p.id && selectedPatterns.has(p.id));
+      const currentProfile = appCore.profileManager.getCurrentProfile();
+      if (!currentProfile) throw new Error('請先選擇Profile');
+      const exported = await appCore.exportEngine.exportPatterns(patternsToExport, currentProfile, { format: 'json', quality: 'high' });
 
       if (exported) {
         setExportState({
@@ -174,7 +176,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
     setImportState({ loading: true });
 
     try {
-      const importedCount = await appCore.patternManager.importPatternsFromFile(importFile);
+      const importedCount = await appCore.patternManager.importPatternFromFile(importFile);
       setImportState({
         loading: false,
         success: `成功導入 ${importedCount} 個模式`
@@ -200,7 +202,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
     const totalDuration = notes.reduce((sum, note) => sum + note.duration, 0);
     const uniqueNotes = new Set(notes.map(note => `${note.name}${note.octave}`)).size;
     const avgVolume = notes.length > 0 ?
-      notes.reduce((sum, note) => sum + note.volume, 0) / notes.length : 0;
+      notes.reduce((sum, note) => sum + (note.volume ?? 0), 0) / notes.length : 0;
 
     return {
       totalDuration: totalDuration / 1000,
@@ -303,7 +305,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {patterns.map((pattern) => {
             const isSelected = selectedPatternId === pattern.id;
-            const isChecked = selectedPatterns.has(pattern.id);
+            const isChecked = pattern.id ? selectedPatterns.has(pattern.id) : false;
             const stats = getPatternStats(pattern);
 
             return (
@@ -324,7 +326,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => togglePatternSelection(pattern.id)}
+                        onChange={() => pattern.id && togglePatternSelection(pattern.id)}
                         className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                       />
                       <span className="ml-2 text-sm text-gray-500">選擇</span>
@@ -363,17 +365,14 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
                     {/* 節拍和版本信息 */}
                     <div className="flex items-center justify-between text-xs text-gray-500 mt-3">
                       <span>節拍: {pattern.tempo} BPM</span>
-                      <span>v{pattern.version}</span>
+                      {pattern.version && <span>v{pattern.version}</span>}
                     </div>
                   </div>
 
                   {/* 操作按鈕 */}
                   <div className="flex items-center space-x-2 pt-2 border-t border-gray-100">
                     <Button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPatternSelect?.(pattern);
-                      }}
+                      onClick={() => onPatternSelect?.(pattern)}
                       variant={isSelected ? 'success' : 'primary'}
                       size="sm"
                       className="flex-1"
@@ -383,10 +382,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
                     </Button>
 
                     <Button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPatternEdit?.(pattern);
-                      }}
+                      onClick={() => onPatternEdit?.(pattern)}
                       variant="secondary"
                       size="sm"
                       icon={
@@ -403,6 +399,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
                       <Button
                         variant="secondary"
                         size="sm"
+                        aria-label="更多操作"
                         icon={
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
@@ -424,7 +421,7 @@ export const PatternLibrary: React.FC<PatternLibraryProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeletePattern(pattern.id);
+                            pattern.id && handleDeletePattern(pattern.id);
                           }}
                           className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-b-lg"
                         >

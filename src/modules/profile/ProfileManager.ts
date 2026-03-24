@@ -216,7 +216,6 @@ export class ProfileManager {
       return false;
     }
 
-    const oldProfileId = this.currentProfileId;
     this.currentProfileId = profileId;
 
     const profile = this.profiles.get(profileId)!;

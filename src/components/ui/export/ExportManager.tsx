@@ -1,6 +1,6 @@
 // Export Manager 導出管理組件
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Pattern } from '../../../types';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 import { Card } from '../common/Card';
@@ -83,7 +83,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
   // 預選patterns
   useEffect(() => {
     if (preSelectedPatterns.length > 0) {
-      setSelectedPatterns(new Set(preSelectedPatterns.map(p => p.id)));
+      setSelectedPatterns(new Set(preSelectedPatterns.map(p => p.id).filter((id): id is string => !!id)));
     }
   }, [preSelectedPatterns]);
 
@@ -105,7 +105,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
     if (selectedPatterns.size === patterns.length) {
       setSelectedPatterns(new Set());
     } else {
-      setSelectedPatterns(new Set(patterns.map(p => p.id)));
+      setSelectedPatterns(new Set(patterns.map(p => p.id).filter((id): id is string => !!id)));
     }
   };
 
@@ -120,13 +120,16 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
       case 'recent':
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        filtered = patterns.filter(p => new Date(p.updated_at) > oneWeekAgo);
+        filtered = patterns.filter(p => {
+          const dateStr = p.updated_at || p.modifiedAt;
+          return dateStr ? new Date(dateStr) > oneWeekAgo : false;
+        });
         break;
       default:
         filtered = patterns;
     }
 
-    setSelectedPatterns(new Set(filtered.map(p => p.id)));
+    setSelectedPatterns(new Set(filtered.map(p => p.id).filter((id): id is string => !!id)));
   };
 
   // 獲取導出預估
@@ -134,7 +137,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
     const selectedCount = selectedPatterns.size;
     if (selectedCount === 0) return null;
 
-    const selectedPatternList = patterns.filter(p => selectedPatterns.has(p.id));
+    const selectedPatternList = patterns.filter(p => p.id && selectedPatterns.has(p.id));
     const totalNotes = selectedPatternList.reduce((sum, p) => sum + (p.notes?.length || 0), 0);
     const totalDuration = selectedPatternList.reduce((sum, p) =>
       sum + (p.notes || []).reduce((noteSum, note) => noteSum + note.duration, 0), 0
@@ -173,7 +176,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
   const startExport = async () => {
     if (!appCore || selectedPatterns.size === 0) return;
 
-    const patternsToExport = patterns.filter(p => selectedPatterns.has(p.id));
+    const patternsToExport = patterns.filter(p => p.id && selectedPatterns.has(p.id));
 
     setExportProgress({
       isExporting: true,
@@ -197,16 +200,9 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
         }));
 
         // 根據格式導出
-        if (exportOptions.format === 'wav') {
-          await appCore.exportEngine.exportPatternAsWAV(pattern, {
-            quality: exportOptions.quality,
-            includeMetadata: exportOptions.includeMetadata
-          });
-        } else {
-          await appCore.exportEngine.exportPatternAsJSON(pattern, {
-            includeMetadata: exportOptions.includeMetadata
-          });
-        }
+        const currentProfile = appCore.profileManager.getCurrentProfile();
+        if (!currentProfile) throw new Error('請先選擇Profile');
+        await appCore.exportEngine.exportPatterns([pattern], currentProfile, { format: exportOptions.format, quality: exportOptions.quality });
 
         // 模擬處理延遲
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -305,7 +301,8 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
             最近一週 ({patterns.filter(p => {
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            return new Date(p.updated_at) > oneWeekAgo;
+            const dateStr = p.updated_at || p.modifiedAt;
+            return dateStr ? new Date(dateStr) > oneWeekAgo : false;
           }).length})
           </Button>
           <Button
@@ -345,7 +342,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {patterns.map((pattern) => {
-              const isSelected = selectedPatterns.has(pattern.id);
+              const isSelected = pattern.id ? selectedPatterns.has(pattern.id) : false;
               const totalDuration = (pattern.notes || []).reduce((sum, note) => sum + note.duration, 0);
 
               return (
@@ -358,14 +355,14 @@ export const ExportManager: React.FC<ExportManagerProps> = ({
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => togglePatternSelection(pattern.id)}
+                    onChange={() => pattern.id && togglePatternSelection(pattern.id)}
                     className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                   />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <h4 className="font-medium text-gray-900 truncate">{pattern.name}</h4>
-                      <span className="text-xs text-gray-500">v{pattern.version}</span>
+                      {pattern.version && <span className="text-xs text-gray-500">v{pattern.version}</span>}
                     </div>
                     <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
                       <span>{pattern.notes?.length || 0} 音符</span>

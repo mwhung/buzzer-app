@@ -1,6 +1,6 @@
 // Pattern Editor 模式編輯器組件
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Pattern, Note } from '../../../types';
 import { MusicTheory } from '../../../modules/music/MusicTheory';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
@@ -34,6 +34,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
     pattern || {
       id: `pattern-${Date.now()}`,
       name: '新模式',
+      pattern: [],
       notes: [],
       tempo: 120,
       version: '1.0.0',
@@ -55,7 +56,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
 
   // 引用
   const dragItemRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 深度比較兩個Pattern是否相等
   const patternsEqual = (p1: Pattern | null, p2: Pattern | null): boolean => {
@@ -86,22 +87,6 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
     }
     onPatternChange?.(editingPattern);
   }, [editingPattern, onPatternChange]);
-
-  // 添加音符
-  const addNote = (note: Note) => {
-    if (readOnly) return;
-
-    const newNote: Note = {
-      ...note,
-      id: `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    };
-
-    setEditingPattern(prev => ({
-      ...prev,
-      notes: [...prev.notes, newNote],
-      updated_at: new Date().toISOString()
-    }));
-  };
 
   // 移除音符
   const removeNote = (index: number) => {
@@ -440,7 +425,7 @@ export const PatternEditor: React.FC<PatternEditorProps> = ({
                     </div>
 
                     <div className="text-sm text-gray-600 min-w-[60px]">
-                      {note.volume.toFixed(1)}dB
+                      {(note.volume ?? 0).toFixed(1)}dB
                     </div>
 
                     {/* 時長控制 */}

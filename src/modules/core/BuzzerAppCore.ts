@@ -13,9 +13,9 @@ import {
   WorkflowStages,
   AudioEvent,
   PatternEvent,
-  ProfileEvent,
-  WorkflowEvent
+  ProfileEvent
 } from '../../types';
+import { WorkflowEvent } from '../workflow/WorkflowManager';
 import { ensurePatternSync } from '../../utils/patternConverter';
 
 export interface BuzzerAppConfig {
@@ -364,7 +364,7 @@ export class BuzzerAppCore {
     let pattern: Pattern | null;
 
     if (patternId) {
-      pattern = this.patternManager.getPatternById(patternId);
+      pattern = this.patternManager.getPattern(patternId);
     } else {
       pattern = this.appState.currentPattern;
     }
