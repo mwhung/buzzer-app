@@ -1,11 +1,12 @@
 // Profile管理界面組件
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Buzzer } from '../../../types';
 import { useBuzzerApp } from '../../../hooks/useBuzzerApp';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { Modal } from '../common/Modal';
+import { useToast } from '../common/Toast';
 
 export interface ProfileManagerUIProps {
   className?: string;
@@ -15,6 +16,7 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
   className = ''
 }) => {
   const { appCore } = useBuzzerApp();
+  const { showToast } = useToast();
   const [profiles, setProfiles] = useState<Array<{ id: string; profile: Buzzer }>>([]);
   const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -39,7 +41,6 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
     loadProfiles();
 
-    // 監聽profile變更事件
     const handleProfileEvent = () => {
       loadProfiles();
     };
@@ -60,8 +61,10 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
     if (!appCore) return;
 
     const success = appCore.profileManager.setCurrentProfile(profileId);
-    if (!success) {
-      alert('選擇Profile失敗');
+    if (success) {
+      showToast('success', 'Profile 已切換');
+    } else {
+      showToast('error', '選擇 Profile 失敗');
     }
   };
 
@@ -84,23 +87,19 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
     try {
       const profileId = await appCore.profileManager.importProfileFromFile(importFile);
-      setImportStatus({
-        loading: false,
-        success: `成功導入Profile: ${profileId}`
-      });
+      setImportStatus({ loading: false, success: `成功導入Profile: ${profileId}` });
       setImportFile(null);
+      showToast('success', 'Profile 導入成功');
 
-      // 延遲關閉模態框
       setTimeout(() => {
         setIsImportModalOpen(false);
         setImportStatus({ loading: false });
       }, 1500);
 
     } catch (error) {
-      setImportStatus({
-        loading: false,
-        error: error instanceof Error ? error.message : '導入失敗'
-      });
+      const msg = error instanceof Error ? error.message : '導入失敗';
+      setImportStatus({ loading: false, error: msg });
+      showToast('error', msg);
     }
   };
 
@@ -112,12 +111,8 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* 標題區域 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Buzzer Profile 管理</h2>
-          <p className="text-gray-600 mt-1">選擇或導入Buzzer音頻特性檔案</p>
-        </div>
+      {/* 操作欄（不重複標題，由 App.tsx 提供階段標題） */}
+      <div className="flex items-center justify-end">
         <Button
           onClick={() => setIsImportModalOpen(true)}
           icon={
@@ -140,7 +135,7 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
             <Card
               key={id}
               variant={isSelected ? 'highlighted' : 'default'}
-              className={`cursor-pointer transition-all duration-200 hover:scale-105 ${
+              className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] ${
                 isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
               }`}
               onClick={() => handleSelectProfile(id)}
@@ -152,7 +147,10 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
                     {profile.buzzer_name}
                   </h3>
                   {isSelected && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                    <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
                       使用中
                     </span>
                   )}
@@ -160,39 +158,25 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
 
                 {/* Profile統計 */}
                 {stats && (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <div className="font-medium text-gray-900">{stats.totalPoints}</div>
-                      <div className="text-gray-500">頻率點數</div>
+                      <div className="text-gray-600">頻率點數</div>
                     </div>
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <div className="font-medium text-gray-900">
                         {stats.avgSPL.toFixed(1)}dB
                       </div>
-                      <div className="text-gray-500">平均音量</div>
+                      <div className="text-gray-600">平均音量</div>
                     </div>
                     <div className="bg-gray-50 p-3 rounded-lg col-span-2">
                       <div className="font-medium text-gray-900">
                         {stats.frequencyRange[0]}Hz - {stats.frequencyRange[1]}Hz
                       </div>
-                      <div className="text-gray-500">頻率範圍</div>
+                      <div className="text-gray-600">頻率範圍</div>
                     </div>
                   </div>
                 )}
-
-                {/* 選擇按鈕 */}
-                <Button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelectProfile(id);
-                  }}
-                  variant={isSelected ? 'success' : 'primary'}
-                  size="sm"
-                  className="w-full"
-                  disabled={isSelected}
-                >
-                  {isSelected ? '已選擇' : '選擇此Profile'}
-                </Button>
               </div>
             </Card>
           );
@@ -203,12 +187,15 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
           <Card className="col-span-full">
             <div className="text-center py-8">
               <div className="text-gray-400 mb-4">
-                <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">尚無Profile</h3>
-              <p className="text-gray-500">點擊「導入Profile」開始使用</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">尚無 Profile</h3>
+              <p className="text-gray-600 mb-4">導入 Buzzer Profile 檔案以開始設計音頻模式</p>
+              <Button onClick={() => setIsImportModalOpen(true)} variant="primary">
+                導入 Profile
+              </Button>
             </div>
           </Card>
         )}
@@ -257,7 +244,7 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
               type="file"
               accept=".json"
               onChange={handleFileSelect}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+              className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
             />
           </div>
 
@@ -269,7 +256,7 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span className="text-sm font-medium text-blue-900">{importFile.name}</span>
-                <span className="text-sm text-blue-600">({(importFile.size / 1024).toFixed(1)}KB)</span>
+                <span className="text-sm text-blue-700">({(importFile.size / 1024).toFixed(1)}KB)</span>
               </div>
             </div>
           )}
@@ -300,14 +287,14 @@ export const ProfileManagerUI: React.FC<ProfileManagerUIProps> = ({
           {/* 說明文字 */}
           <div className="bg-gray-50 p-3 rounded-lg">
             <h4 className="font-medium text-gray-900 mb-2">Profile文件格式說明：</h4>
-            <pre className="text-xs text-gray-600 bg-white p-3 rounded border overflow-x-auto">
+            <pre className="text-xs text-gray-700 bg-white p-3 rounded border overflow-x-auto">
 {`{
   "buzzer_name": "My Buzzer",
   "frequencies": [440, 880, 1320, ...],
   "spl_values": [60, 55, 50, ...]
 }`}
             </pre>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-gray-600 mt-2">
               frequencies和spl_values數組長度必須相同
             </p>
           </div>

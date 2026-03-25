@@ -31,9 +31,13 @@ export class ExportEngine {
   private audioEngine: AudioEngine;
   private exportTasks: Map<string, ExportTask> = new Map();
   private isExporting: boolean = false;
-  private currentExportId: string | null = null;
+  private _currentExportId: string | null = null;
 
-  // 事件監聽器
+  get currentExportId(): string | null {
+    return this._currentExportId;
+  }
+
+  // 事件監聯器
   private progressListeners: ((progress: ExportProgress) => void)[] = [];
   private completeListeners: ((results: ExportTask[]) => void)[] = [];
 
@@ -54,7 +58,7 @@ export class ExportEngine {
     }
 
     this.isExporting = true;
-    this.currentExportId = this.generateExportId();
+    this._currentExportId = this.generateExportId();
     this.exportTasks.clear();
 
     // 創建導出任務
@@ -125,7 +129,7 @@ export class ExportEngine {
       });
     } finally {
       this.isExporting = false;
-      this.currentExportId = null;
+      this._currentExportId = null;
     }
 
     return results;
@@ -138,7 +142,7 @@ export class ExportEngine {
     task: ExportTask,
     pattern: Pattern,
     buzzerProfile: Buzzer,
-    options: ExportOptions
+    _options: ExportOptions
   ): Promise<ExportTask> {
     const updatedTask = { ...task };
 
@@ -223,7 +227,7 @@ export class ExportEngine {
   /**
    * 創建ZIP包（高級功能）
    */
-  async createZipArchive(tasks: ExportTask[]): Promise<Blob> {
+  async createZipArchive(_tasks: ExportTask[]): Promise<Blob> {
     // 注意：這需要一個ZIP庫（如JSZip），這裡提供接口
     throw new Error('ExportEngine: ZIP功能需要額外的庫支持，暫未實現');
 
@@ -321,7 +325,7 @@ export class ExportEngine {
 
     console.log('ExportEngine: 取消導出任務');
     this.isExporting = false;
-    this.currentExportId = null;
+    this._currentExportId = null;
 
     this.emitProgress({
       currentTask: 0,

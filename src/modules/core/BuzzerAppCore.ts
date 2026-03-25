@@ -6,6 +6,7 @@ import { ProfileManager } from '../profile/ProfileManager';
 import { PatternManager } from '../pattern/PatternManager';
 import { ExportEngine } from '../export/ExportEngine';
 import { WorkflowManager } from '../workflow/WorkflowManager';
+import { StorageManager } from '../storage/StorageManager';
 
 import {
   Buzzer,
@@ -13,9 +14,9 @@ import {
   WorkflowStages,
   AudioEvent,
   PatternEvent,
-  ProfileEvent,
-  WorkflowEvent
+  ProfileEvent
 } from '../../types';
+import { WorkflowEvent } from '../workflow/WorkflowManager';
 import { ensurePatternSync } from '../../utils/patternConverter';
 
 export interface BuzzerAppConfig {
@@ -47,6 +48,7 @@ export class BuzzerAppCore {
   public readonly patternManager: PatternManager;
   public readonly exportEngine: ExportEngine;
   public readonly workflowManager: WorkflowManager;
+  public readonly storageManager: StorageManager;
 
   // 應用狀態
   private appState: AppState;
@@ -86,6 +88,7 @@ export class BuzzerAppCore {
     this.patternManager = new PatternManager();
     this.exportEngine = new ExportEngine(this.audioEngine);
     this.workflowManager = new WorkflowManager(this.config.initialWorkflowStage);
+    this.storageManager = new StorageManager();
 
     // 設置模組間的事件監聽
     this.setupCrossModuleEventListening();
@@ -105,6 +108,14 @@ export class BuzzerAppCore {
 
       // 設置默認音量
       this.audioEngine.setMasterVolume(this.config.defaultMasterVolume || 0.3);
+
+      // 初始化 IndexedDB 並載入已儲存的資料
+      await this.loadFromStorage();
+
+      // 設置自動儲存監聽
+      if (this.config.autoSave) {
+        this.setupAutoSave();
+      }
 
       // 獲取初始數據
       const currentProfile = this.profileManager.getCurrentProfile();
@@ -135,6 +146,165 @@ export class BuzzerAppCore {
     } catch (error) {
       console.error('BuzzerAppCore: 初始化失敗', error);
       this.addError(error instanceof Error ? error.message : '初始化失敗');
+      throw error;
+    }
+  }
+
+  /**
+   * 從 IndexedDB 載入已儲存的資料
+   */
+  private async loadFromStorage(): Promise<void> {
+    try {
+      await this.storageManager.initialize();
+
+      // 載入已儲存的 profiles
+      const storedProfiles = await this.storageManager.getAllProfiles();
+      if (storedProfiles.length > 0) {
+        for (const { id, profile } of storedProfiles) {
+          this.profileManager.loadProfileDirect(id, profile);
+        }
+        console.log(`BuzzerAppCore: 從儲存載入 ${storedProfiles.length} 個 profiles`);
+
+        // 恢復上次選中的 profile
+        const savedProfileId = await this.storageManager.getMeta<string>('currentProfileId');
+        if (savedProfileId) {
+          this.profileManager.setCurrentProfile(savedProfileId);
+        }
+      }
+
+      // 載入已儲存的 patterns
+      const storedPatterns = await this.storageManager.getAllPatterns();
+      if (storedPatterns.length > 0) {
+        for (const { id, pattern } of storedPatterns) {
+          this.patternManager.loadPatternDirect(id, pattern);
+        }
+        console.log(`BuzzerAppCore: 從儲存載入 ${storedPatterns.length} 個 patterns`);
+
+        // 恢復上次選中的 pattern
+        const savedPatternId = await this.storageManager.getMeta<string>('currentPatternId');
+        if (savedPatternId) {
+          this.patternManager.setCurrentPattern(savedPatternId);
+        }
+      }
+    } catch (error) {
+      console.warn('BuzzerAppCore: 從儲存載入資料失敗，使用預設資料', error);
+    }
+  }
+
+  /**
+   * 設置自動儲存：監聽 profile/pattern 變更事件，自動寫入 IndexedDB
+   */
+  private setupAutoSave(): void {
+    // Profile 變更自動儲存
+    this.profileManager.addEventListener('create', (event) => {
+      if (event.profileId && event.profile) {
+        this.storageManager.saveProfile(event.profileId, event.profile).catch(console.error);
+      }
+    });
+    this.profileManager.addEventListener('import', (event) => {
+      if (event.profileId && event.profile) {
+        this.storageManager.saveProfile(event.profileId, event.profile).catch(console.error);
+      }
+    });
+    this.profileManager.addEventListener('delete', (event) => {
+      if (event.profileId) {
+        this.storageManager.deleteProfile(event.profileId).catch(console.error);
+      }
+    });
+    this.profileManager.addEventListener('select', (event) => {
+      if (event.profileId) {
+        this.storageManager.setMeta('currentProfileId', event.profileId).catch(console.error);
+      }
+    });
+
+    // Pattern 變更自動儲存
+    this.patternManager.addEventListener('create', (event) => {
+      if (event.patternId && event.pattern) {
+        this.storageManager.savePattern(event.patternId, event.pattern).catch(console.error);
+      }
+    });
+    this.patternManager.addEventListener('update', (event) => {
+      if (event.patternId && event.pattern) {
+        this.storageManager.savePattern(event.patternId, event.pattern).catch(console.error);
+        // 每次更新時自動保存版本快照
+        this.storageManager.saveVersion(event.patternId, event.pattern).catch(console.error);
+      }
+    });
+    this.patternManager.addEventListener('delete', (event) => {
+      if (event.patternId) {
+        this.storageManager.deletePattern(event.patternId).catch(console.error);
+      }
+    });
+    this.patternManager.addEventListener('select', (event) => {
+      if (event.patternId) {
+        this.storageManager.setMeta('currentPatternId', event.patternId).catch(console.error);
+      }
+    });
+
+    console.log('BuzzerAppCore: 自動儲存已啟用');
+  }
+
+  /**
+   * 獲取 pattern 的版本歷史
+   */
+  async getPatternVersions(patternId: string) {
+    return this.storageManager.getVersionsByPatternId(patternId);
+  }
+
+  /**
+   * 恢復 pattern 到指定版本
+   */
+  async restorePatternVersion(versionId: string): Promise<boolean> {
+    try {
+      const version = await this.storageManager.getVersion(versionId);
+      if (!version) {
+        this.addError('找不到指定的版本');
+        return false;
+      }
+
+      const success = this.patternManager.updatePattern(version.patternId, {
+        ...version.pattern,
+        modifiedAt: new Date().toISOString()
+      });
+
+      if (success) {
+        console.log(`BuzzerAppCore: 已恢復 pattern 到版本 ${versionId}`);
+      }
+      return success;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '版本恢復失敗';
+      this.addError(message);
+      return false;
+    }
+  }
+
+  /**
+   * 手動儲存所有當前資料到 IndexedDB
+   */
+  async saveAll(): Promise<void> {
+    try {
+      // 儲存所有 profiles
+      for (const { id, profile } of this.profileManager.getAllProfiles()) {
+        await this.storageManager.saveProfile(id, profile);
+      }
+
+      // 儲存所有 patterns
+      for (const pattern of this.patternManager.getAllPatterns()) {
+        if (pattern.id) {
+          await this.storageManager.savePattern(pattern.id, pattern);
+        }
+      }
+
+      // 儲存當前選中項
+      const currentProfileId = this.profileManager.getCurrentProfileId();
+      const currentPatternId = this.patternManager.getCurrentPatternId();
+      if (currentProfileId) await this.storageManager.setMeta('currentProfileId', currentProfileId);
+      if (currentPatternId) await this.storageManager.setMeta('currentPatternId', currentPatternId);
+
+      console.log('BuzzerAppCore: 所有資料已手動儲存');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '儲存失敗';
+      this.addError(message);
       throw error;
     }
   }
@@ -364,7 +534,7 @@ export class BuzzerAppCore {
     let pattern: Pattern | null;
 
     if (patternId) {
-      pattern = this.patternManager.getPatternById(patternId);
+      pattern = this.patternManager.getPattern(patternId);
     } else {
       pattern = this.appState.currentPattern;
     }
@@ -519,6 +689,7 @@ export class BuzzerAppCore {
     this.patternManager.dispose();
     this.exportEngine.dispose();
     this.workflowManager.dispose();
+    this.storageManager.dispose();
 
     // 清除事件監聽器
     this.eventListeners.clear();

@@ -4,7 +4,7 @@ import { WorkflowStages, WorkflowStage } from '../../types';
 
 export interface WorkflowState {
   currentStage: WorkflowStages;
-  previousStage: WorkflowStages | null;
+  previousStage: WorkflowStages | undefined;
   stageHistory: WorkflowStages[];
   canGoBack: boolean;
   canGoNext: boolean;
@@ -66,7 +66,7 @@ export class WorkflowManager {
   constructor(initialStage: WorkflowStages = WorkflowStages.PROFILE_MANAGEMENT) {
     this.workflowState = {
       currentStage: initialStage,
-      previousStage: null,
+      previousStage: undefined,
       stageHistory: [initialStage],
       canGoBack: false,
       canGoNext: true,
@@ -171,7 +171,7 @@ export class WorkflowManager {
     const history = [...this.workflowState.stageHistory].reverse();
     const currentStageIndex = history.indexOf(this.workflowState.currentStage);
 
-    let previousStage: WorkflowStages | null = null;
+    let previousStage: WorkflowStages | undefined = undefined;
     for (let i = currentStageIndex + 1; i < history.length; i++) {
       if (history[i] !== this.workflowState.currentStage) {
         previousStage = history[i];
@@ -352,7 +352,7 @@ export class WorkflowManager {
 
     this.workflowState = {
       currentStage: WorkflowStages.PROFILE_MANAGEMENT,
-      previousStage: null,
+      previousStage: undefined,
       stageHistory: [WorkflowStages.PROFILE_MANAGEMENT],
       canGoBack: false,
       canGoNext: true,

@@ -33,6 +33,7 @@ export class PatternManager {
     const defaultPatterns: Omit<Pattern, 'id'>[] = [
       {
         name: "示例Pattern",
+        notes: [],
         pattern: [
           [440, 200],
           [523, 300],
@@ -43,6 +44,7 @@ export class PatternManager {
       },
       {
         name: "音量測試Pattern",
+        notes: [],
         pattern: [
           [5274, 500],  // 最低音量 (37.8dB)
           [0, 200],     // 靜音間隔
@@ -321,9 +323,17 @@ export class PatternManager {
 
     return this.createPattern({
       name: duplicatedName,
+      notes: [],
       pattern: [...originalPattern.pattern], // 深拷貝pattern數組
       createdAt: new Date().toISOString()
     });
+  }
+
+  /**
+   * 直接載入 pattern（從儲存恢復時使用，不觸發事件）
+   */
+  loadPatternDirect(patternId: string, pattern: Pattern): void {
+    this.patterns.set(patternId, { ...pattern, id: patternId });
   }
 
   /**

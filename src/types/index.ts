@@ -12,15 +12,21 @@ export interface Pattern {
   pattern: [number, number][]; // [frequency, duration] - for backend compatibility
   notes: Note[]; // for UI components
   tempo?: number; // BPM
+  version?: string;
   createdAt?: string;
   modifiedAt?: string;
+  // Aliases used by some components
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Note {
+  id?: string;
   name: string; // C, C#, D, D#, E, F, F#, G, G#, A, A#, B
   octave: number; // 0-8
   frequency: number;
   duration: number; // duration in milliseconds
+  volume?: number; // calculated volume/SPL for this note
   spl?: number; // SPL value if available in buzzer profile
 }
 

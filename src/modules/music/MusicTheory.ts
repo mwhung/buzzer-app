@@ -15,7 +15,7 @@ export class MusicTheory {
    */
   static frequencyToNote(frequency: number): Note {
     if (frequency <= 0) {
-      return { name: '靜音', octave: 0, frequency: 0 };
+      return { name: '靜音', octave: 0, frequency: 0, duration: 0 };
     }
 
     // 計算 MIDI note number
@@ -29,7 +29,8 @@ export class MusicTheory {
     return {
       name: noteName,
       octave: Math.max(0, octave),
-      frequency: frequency
+      frequency: frequency,
+      duration: 0
     };
   }
 
@@ -140,7 +141,8 @@ export class MusicTheory {
         octaveNotes.push({
           name: noteName,
           octave,
-          frequency
+          frequency,
+          duration: 0
         });
       }
 
